@@ -2,7 +2,7 @@
 from setuptools import find_packages, setup
 
 setup(
-    name='aiai',
+    name='src',
     packages=find_packages(),
     version='0.1.0',
     description='AI for imaging inverse problems',
