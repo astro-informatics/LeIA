@@ -2,8 +2,11 @@
 import numpy as np
 from pynufft import NUFFT
 
+from tfkbnufft import kbnufft_forward, kbnufft_adjoint
+from tfkbnufft.kbnufft import KbNufftModule
+import tensorflow as tf
 
-class MeasurementOperator():
+class NUFFT_op():
     """Simple measurement operator using the pyNUFFT package to sample at non-uniform u,v coordinates"""
     def __init__(self, vis, Nd=(256,256), Kd=(512,512), Jd=(6,6)):
         """ Initialises the measurement operators for u,v coordinates 'vis' (M x 2)"""
@@ -23,7 +26,38 @@ class MeasurementOperator():
         x = self.adj_op(y)
         return x.real
 
-class MeasurementOperatorDiscrete():
+
+class NUFFT_op_TF():
+    """Simple measurement operator using the pyNUFFT package to sample at non-uniform u,v coordinates"""
+    def __init__(self, vis, Nd=(256,256), Kd=(512,512), Jd=(6,6)):
+        """ Initialises the measurement operators for u,v coordinates 'vis' (M x 2)"""
+        self.op = KbNufftModule(im_size=Nd, grid_size=Kd, numpoints=Jd[0], norm='ortho')
+        self.vis = tf.convert_to_tensor(vis)[None, ...]
+        # self.op.batch = Nd[0]
+        # self.op.plan(vis, Nd, Kd, Jd)
+        # self.op.preapre_for_tf()
+    
+    @tf.function()
+    def dir_op(self, x):
+        # x = tf.cast(tf.convert_to_tensor(x), tf.complex64)[None, None, ...]
+        y =  kbnufft_forward(self.op._extract_nufft_interpob())(x, self.vis)
+        return y
+    
+    @tf.function()
+    def adj_op(self, y):
+        interpob = self.op._extract_nufft_interpob()
+        nufft_adj = kbnufft_adjoint(interpob)
+        x = nufft_adj(y, self.vis)        
+        return x
+    
+    @tf.function()
+    def self_adj(self, x):
+        y = self.dir_op(x)
+        x = self.adj_op(y)
+        return x
+
+
+class FFT_op():
     """Simple measurement operator. This operator maps the u,v coordinates to the nearest gridpoint. """
     def __init__(self, vis, Nd=(256,256), Kd=(512,512)):
         """ Initialises the measurement operators for u,v coordinates 'vis' (M x 2)"""

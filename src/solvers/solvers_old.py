@@ -11,8 +11,9 @@ import optimusprimal.Empty as Empty
 import optimusprimal.prox_operators as prox_operators
 import optimusprimal.grad_operators as grad_operators
 import optimusprimal.linear_operators as linear_operators
-#import optimusprimal.primal_dual as primal_dual
+import optimusprimal.primal_dual as primal_dual
 
+import tensorflow as tf
 logger = logging.getLogger('Optimus Primal')
 
 
@@ -33,6 +34,7 @@ def FBPD(x_init, options=None, g=None, f=None, h=None, p=None, r=None, viewer = 
     w = r.dir_op(x) * 0
     return FBPD_warm_start(x_init, y, z, w, options, g, f, h, p, r, viewer)
 
+# @tf.function()
 def FBPD_warm_start(x_init, y, z, w, options=None, g=None, f=None, h=None, p=None, r=None, viewer = None):
     """Takes in an input signal with proximal operators and a gradient operator
     and returns a solution with diagnostics."""
@@ -77,14 +79,13 @@ def FBPD_warm_start(x_init, y, z, w, options=None, g=None, f=None, h=None, p=Non
     logger.info('Running Forward Backward Primal Dual')
     timing = np.zeros(max_iter)
     criter = np.zeros(max_iter)
-    hs, gs, fs, ps, rs, xs = [], [], [], [], [], []
-    
+
     # algorithm loop
-    for it in range(0, max_iter):
+    for it in tf.range(0, max_iter):
 
         t = time.time()
         # primal forward-backward step
-        x_old = np.copy(x)
+        x_old = tf.convert_to_tensor(np.copy(x))
         x = x - tau * (g.grad(x) + h.adj_op(y) + p.adj_op(z) + r.adj_op(w))
         x = f.prox(x, tau)
         # dual forward-backward step
@@ -116,51 +117,123 @@ def FBPD_warm_start(x_init, y, z, w, options=None, g=None, f=None, h=None, p=Non
                             it, max_iter, np.linalg.norm(x - x_old) / np.linalg.norm(x_old))
                 if viewer is not None:
                     viewer(x, it)
-                hs.append(h.fun(h.dir_op(x)))
-                gs.append(g.fun(x))
-                fs.append(f.fun(x))
-                ps.append(p.fun(p.dir_op(x)))
-                rs.append(r.fun(r.dir_op(x)))
-                xs.append(x)
-
         logger.debug('[Primal Dual] %d out of %d iterations, tol = %f',
                      it, max_iter, np.linalg.norm(x - x_old) / np.linalg.norm(x_old))
 
     criter = criter[0:it + 1]
     timing = np.cumsum(timing[0:it + 1])
     solution = x
-    diagnostics = {'max_iter': it, 'times': timing, 'Obj_vals': criter, 'z': z, 'y': y, 'w': w, "hs": hs, "gs":gs, 'fs':fs, "ps":ps, "rs":rs, "xs":xs}
+    diagnostics = {'max_iter': it, 'times': timing, 'Obj_vals': criter, 'z': z, 'y': y, 'w': w}
     return solution, diagnostics
 
 
 
-def l1_constrained_solver(data, phi, sigma, beta=1e-3, options={'tol': 1e-5, 'iter': 5000, 'update_iter': 50, 'record_iters': False, 'positivity': False, 'real': False}):
+# def l1_constrained_solver(data, phi, sigma, beta=1e-3, options={'tol': 1e-5, 'iter': 5000, 'update_iter': 50, 'record_iters': False, 'positivity': False, 'real': False}):
+#     """
+#     Solve constrained l1 regularization problem
+#     """
+#     x_0 = phi.adj_op(data)
+#     size = len(np.ravel(data))
+#     epsilon = np.sqrt(size + 2 * np.sqrt(2 * size)) * sigma # lambda =2
+    
+#     p = prox_operators.l2_ball(epsilon, data, phi)
+#     nu, sol = linear_operators.power_method(phi, x_0)
+#     p.beta = nu    
+
+#     f = None
+
+#     if options['real'] == True:
+#         f = prox_operators.real_prox()
+#     if options["positivity"] == True:
+#         f = prox_operators.positive_prox()
+
+#     wav = ['db' + str(i) for i in range(1,8)]
+#     levels = 4
+#     psi = linear_operators.dictionary(wav, levels, x_0.shape)
+
+#     h = prox_operators.l1_norm(np.max(np.abs(psi.dir_op(x_0))) * beta, psi)
+
+#     return FBPD(x_0, options, None, f, h, p)
+
+# def l1_constrained_solver(measurements, sigma, phi, psi, operator_norm=1, beta=1e-3, options={'tol': 1e-5, 'iter': 5000, 'update_iter': 50, 'record_iters': False, 'positivity': False, 'real': False}, viewer=None):
+#     """
+#     Solve constrained l1 regularization problem
+#     """
+#     estimate = phi.adj_op(measurements)
+#     nu, sol = linear_operators.power_method(phi, estimate)
+#     estimate /= nu # normalise x0 for operator norm
+
+#     size = len(np.ravel(measurements))
+#     epsilon = np.sqrt(size + 2 * np.sqrt(size)) * sigma
+#     p = prox_operators.l2_ball(epsilon, measurements, phi)
+#     p.beta = nu
+
+#     step = np.max(np.real(psi.dir_op(estimate))) * beta
+#     h = prox_operators.l1_norm(step, psi)
+
+#     f = None
+#     if options['real'] == True:
+#         if options["positivity"] == True:
+#             f = prox_operators.positive_prox()
+#         else:
+#             f = prox_operators.real_prox()
+#     r = None
+#     return primal_dual.FBPD(estimate, options, None, f, h, p, r, viewer)
+
+class l2_ball(prox_operators.l2_ball):
+    def __init__(self, epsilon, data, Phi=None):
+        super().__init__(epsilon, data, Phi=Phi)
+    
+    @tf.function()
+    def dir_op(self, x):
+        return super().dir_op(x)
+    
+    @tf.function()
+    def adj_op(self, x):
+        return super().adj_op(x)
+
+def l1_constrained_solver(estimate, measurements, sigma, phi, psi, operator_norm=1, beta=1e-3, options={'tol': 1e-5, 'iter': 5000, 'update_iter': 50, 'record_iters': False, 'positivity': False, 'real': False}, viewer=None):
     """
     Solve constrained l1 regularization problem
     """
-    x_0 = phi.adj_op(data)
-    size = len(np.ravel(data))
-    epsilon = np.sqrt(size + 2 * np.sqrt(2 * size)) * sigma # lambda =2
+
+    size = len(np.ravel(measurements))
+    epsilon = np.sqrt(size + 2 * np.sqrt(size)) * sigma
+
+    nu, sol = linear_operators.power_method(phi, estimate)
+
+    p = prox_operators.l2_ball(epsilon, measurements, phi)
+    p.beta = nu
     
-    p = prox_operators.l2_ball(epsilon, data, phi)
-    nu, sol = linear_operators.power_method(phi, np.ones_like(x_0))
-    p.beta = nu    
-
+    step = np.max(np.real(psi.dir_op(estimate))) * beta
+    h = prox_operators.l1_norm(step, psi)
     f = None
-
     if options['real'] == True:
-        f = prox_operators.real_prox()
-    if options["positivity"] == True:
-        f = prox_operators.positive_prox()
+        if options["positivity"] == True:
+            f = prox_operators.positive_prox()
+        else:
+            f = prox_operators.real_prox()
+    r = None
+    return primal_dual.FBPD(estimate, options, None, f, h, p, r, viewer)
 
-    wav = ['db' + str(i) for i in range(1,8)]
-    levels = 4
-    psi = linear_operators.dictionary(wav, levels, x_0.shape)
-
-    h = prox_operators.l1_norm(np.max(np.abs(psi.dir_op(x_0))) * beta, psi)
-
-    return FBPD(x_0, options, None, f, h, p)
-
+def l1_constrained_solver_TF(estimate, measurements, sigma, phi, psi, operator_norm=1, beta=1e-3, options={'tol': 1e-5, 'iter': 5000, 'update_iter': 50, 'record_iters': False, 'positivity': False, 'real': False}, viewer=None):
+    """
+    Solve constrained l1 regularization problem
+    """
+    size = len(np.ravel(measurements))
+    epsilon = np.sqrt(size + 2 * np.sqrt(size)) * sigma
+    p = l2_ball(epsilon, measurements, phi)
+    p.beta = operator_norm
+    step = np.max(np.real(psi.dir_op(estimate))) * beta
+    h = prox_operators.l1_norm(step, psi)
+    f = None
+    if options['real'] == True:
+        if options["positivity"] == True:
+            f = prox_operators.positive_prox()
+        else:
+            f = prox_operators.real_prox()
+    r = None
+    return FBPD(estimate, options, None, f, h, p, r, viewer)
 
 def l1_unconstrained_solver(data, phi, sigma, beta=1e-3, options={'tol': 1e-5, 'iter': 5000, 'update_iter': 50, 'record_iters': False, 'positivity': False, 'real': False}):
     """
@@ -191,6 +264,20 @@ def l1_unconstrained_solver(data, phi, sigma, beta=1e-3, options={'tol': 1e-5, '
     return FBPD(x_0, options, g, f, h)
 
 
-def wavelet_basis(shape, wavelets=range(1,8), levels=4):
-    wav = ['db' + str(i) for i in wavelets]
-    return linear_operators.dictionary(wav, levels, shape)
+class dictionary(linear_operators.dictionary):
+    def __init__(self, wav, levels, shape, axes=None):
+        super().__init__(wav, levels, shape, axes=axes)
+
+    def dir_op(self, x):
+        x = x[0,0] #.numpy()
+        return super().dir_op(x)
+
+
+def wavelet_basis(shape, wavelets=None, levels=None):
+    if wavelets is None:
+        wav = ["db8", "db6", "db4", "db2", "db1", "dirac"]
+        levels = 3 #wavelet levels, makes no difference for dirac
+        # you can choose the convergence criteria of the algorithm
+
+    psi = dictionary(wav, levels, shape)
+    return psi
