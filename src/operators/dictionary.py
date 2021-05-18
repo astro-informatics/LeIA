@@ -15,7 +15,7 @@ def wavelet_basis(shape, wavelets=None, levels=None, TF=False):
         levels = 3 #wavelet levels, makes no difference for dirac
         # you can choose the convergence criteria of the algorithm
 
-    if TF:
-        return dictionary_tf(wav, levels, shape)
+    # if TF:
+    #     return dictionary_tf(wav, levels, shape)
     return linear_operators.dictionary(wav, levels, shape)
 

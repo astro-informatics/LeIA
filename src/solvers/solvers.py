@@ -14,14 +14,15 @@ class BaseSolver():
 
 
 class PrimalDual_l1_constrained(BaseSolver):
-    def __init__(self, m_op, psi, beta=1e-3, 
+    def __init__(self, m_op, psi, beta=1e-2, 
         options={ 'tol': 1e-5, 'iter': 5000, 'update_iter': 50, 
         'record_iters': False, 'positivity': True, 'real': True}):
         super().__init__(m_op, options=options)
         self.psi = psi
         # self.noise_val = noise_val
         self.beta = beta
-    
+        print(self.options)
+
     def solve(self, y, m_op, noise_val):
         x0 = m_op.adj_op(y)
 
