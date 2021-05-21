@@ -7,7 +7,8 @@ matplotlib==3.3.2
 astropy==4.1
 pynufft==2020.2.6
 jupyterlab==2.2.9
-pynufft
+scikit-image==0.18.1
+tensorflow==2.4.1
 
 # optimus primal ( https://github.com/Luke-Pratley/Optimus-Primal )
 optimusprimal==0.0.1

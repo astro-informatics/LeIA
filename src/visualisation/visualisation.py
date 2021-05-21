@@ -3,8 +3,9 @@ import matplotlib.pyplot as plt
 
 
 imshow_kwargs = imshow_kwargs = {
-    "cmap":'afmhot', 
-    "origin":'lower'
+#     "cmap":'afmhot',
+    "cmap":'gray',
+    # "origin":'lower'
     }
 
 def compare(images, ncols=None, nrows=None, titles=None, same_scale=False):

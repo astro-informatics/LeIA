@@ -12,7 +12,8 @@ class NUFFT_op():
         """ Initialises the measurement operators for u,v coordinates 'vis' (M x 2)"""
         self.op = NUFFT()
         self.op.plan(vis, Nd, Kd, Jd)
-    
+        self.n_measurements = len(vis)
+        
     def dir_op(self, x):
         y = self.op.forward(x) 
         return y
@@ -33,6 +34,8 @@ class NUFFT_op_TF():
         """ Initialises the measurement operators for u,v coordinates 'vis' (M x 2)"""
         self.op = KbNufftModule(im_size=Nd, grid_size=Kd, numpoints=Jd[0], norm='ortho')
         self.vis = tf.convert_to_tensor(vis)[None, ...]
+        self.n_measurements = len(vis)
+
         # self.op.batch = Nd[0]
         # self.op.plan(vis, Nd, Kd, Jd)
         # self.op.preapre_for_tf()
@@ -65,6 +68,8 @@ class FFT_op():
         self.Nd = Nd
         self.Kd = Kd
         self.vis = np.zeros(self.Kd, dtype=bool) #visability in 2d
+        self.n_measurements = len(vis)
+
         for u,v in vis:
             self.vis[ int(u/np.pi*Kd[0]//2 -.01)+Kd[0]//2, int(v/np.pi*Kd[1]//2-.01) + Kd[1]//2] = 1
         
