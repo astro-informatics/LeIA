@@ -1,6 +1,6 @@
 import tensorflow as tf
 import time 
-from src.operators.measurement import NUFFT_op, NUFFT_op_TF
+from src.operators.measurement import NUFFT_op
 from src.sampling.uv_sampling import spider_sampling
 # from scipy.io import loadmat
 from skimage import io, color
@@ -31,67 +31,121 @@ class Dataset(tf.data.Dataset):
     @staticmethod
     def _generator(num_samples):
         # Opening the file
-        files = glob.glob("./data/BSR/BSDS500/data/images/test/*.jpg")
+#         files = glob.glob(os.environ["HOME"] + "/src_aiai/data/val2017/*.jpg")
+        files = np.loadtxt(os.environ["HOME"] + 
+            "/src_aiai/images.txt", dtype=str) # only a selection of the files are larger than (256,256)
         for sample_idx in range(num_samples):
-            data = io.imread(files[sample_idx])[:256,:256]
-            data = color.rgb2gray(data)
-            # data = m_op.dir_op(data)
-            data = data_augmentation(data)
-            data = mapping_function(data)
-            yield data
+            if sample_idx >= len(files):
+                print(sample_idx)
+            
+            im = io.imread(files[sample_idx], as_gray=True)
+            if type(im[0,0]) == np.uint8: # some images are in uint for some reason
+                im = im/ 255.
+            im = im[:,:, np.newaxis] # reshaping to (None, None, 1)
+            
+#             data = io.imread(files[sample_idx])
+#             data = color.rgb2gray(data)
+#             data = data[:,:, np.newaxis]
+#             data = tf.convert_to_tensor(data)
+#             data = tf.io.read_file(files[sample_idx])
+#             data = tf.io.decode_jpeg(data, channels=1)
+
+            yield im
 
     def __new__(cls, num_samples=200):
         return tf.data.Dataset.from_generator(
             cls._generator,
-            output_types=tf.complex64,
-            # output_signature = tf.TensorSpec(shape = data_shape, dtype = tf.complex64),
+            # output_types=(tf.float32, tf.float32),
+            output_types= tf.float32,
+#             output_shapes=(tf.TensorShape([256,256,1]),),
+#             output_signature = tf.TensorSpec(shape = (256,256,1), dtype = tf.uint8),
             args=(num_samples,)
         )
 
-def data_augmentation(x):
-    """rotating and mirroring images randomly """
-    p = np.random.rand()
-    k1 = np.random.rand()//0.25
-    x = np.rot90(x, k=k1)
 
-    k2 = np.random.rand()//0.50
-    if k2 == 1:
-        x = np.fliplr(x)
-    return x
+def crop(x):
+#     x = tf.cast(x, tf.float32)/255
+    data = tf.image.random_crop(x, size=(256,256,1))
+    data = tf.image.random_flip_left_right(data)
+    data = tf.image.random_flip_up_down(data)
+    return data
 
 
-def mapping_function(x):
-    y0 = m_op.dir_op(x)
+
+def measurement(x, m_op, ISNR, data_shape, w):
+    y0 = m_op.dir_op(x.reshape(256,256))
 
     sigma = np.sqrt(np.mean(np.abs(y0)**2)) * 10**(-ISNR/20)
     n = np.random.normal( 0, sigma, data_shape) + 1j * np.random.normal( 0, sigma, data_shape)
     y = y0 + n
-    return m_op.adj_op(y*w)
+    
+    x_dirty = m_op.adj_op(y*w).real
+#     fft = lambda x: tf.signal.fftshift(tf.signal.fft2d(tf.signal.fftshift(x, axes=(-2,-1))), axes=(-2,-1))
+    fft = lambda x: np.fft.fftshift(np.fft.fft2(np.fft.fftshift(x), norm='ortho'))
+    
+    y_dirty = fft(x_dirty +0j)
+#     return ((x_dirty.reshape(256,256,1), y.reshape(4440,1)), x.reshape(256,256,1))
+#     print(x_dirty.shape, y_dirty.shape)
+    return (x_dirty.reshape(256,256,1), y_dirty.reshape(256,256,1), x.reshape(256,256,1))
+#     return (x_dirty, y_dirty, x)
+
+# @tf.function(input_signature=[tf.TensorSpec(None, tf.float32)])
+# def tf_function(x):
+#     return tf.numpy_function(mapping_function, [x], (tf.float32, tf.float32))
+#     # return tf.py_function(mapping_function, [x], (tf.float32, tf.float32))
+
+def measurement_func(ISNR=50, data_shape=(4440,)):
+    """function for getting a tf function version of the measurment function"""
+    uv = spider_sampling()
+    m_op = NUFFT_op(uv)
+
+    grid_cell = 2*np.pi /512 
+    binned = (uv[:,:]+np.pi+.5*grid_cell) // grid_cell
+    binned = [tuple(x) for x in binned]
+    cells = set(binned)
+    w_gridded = np.zeros(uv.shape[0])
+    for cell in list(cells):
+        mask = np.all(np.array(cell) ==  binned, axis=1)
+        w_gridded[mask] = np.sum(mask)
+
+    # w = 
+    w = 1/w_gridded
+    w /= w.max()
+
+    func = partial(measurement, m_op=m_op, ISNR=ISNR, data_shape=data_shape, w=w)
+
+    @tf.function(input_signature=[tf.TensorSpec(None, tf.float32)])
+    def tf_function(x):
+#         return tf.numpy_function(func, [x], ((tf.float32, tf.complex64), tf.float32))
+        return tf.numpy_function(func, [x], (tf.float32, tf.complex128, tf.float32))
+
+    return tf_function, func
+
+@tf.function()
+def data_map(x,y,z):
+    """split input and output of train data"""
+#     return {"input_1":x, "input_3":y}, z
+#     x = tf.expand_dims(x, 3)
+    x.set_shape([None,256,256,1])
+#     y = tf.expand_dims(y, 3)
+    y.set_shape([None,256,256,1])
+#     z = tf.expand_dims(z, 3)
+    z.set_shape([None,256,256,1])
+    return (x, y), z
 
 def benchmark(dataset, num_epochs=10):
     start_time = time.perf_counter()
+    last_time = time.perf_counter()
     for epoch_num in range(num_epochs):
         for sample in dataset:
-            # Performing a training step
-            # time.sleep(0.01)
             pass
+        print(f"Execution time {epoch_num}:", time.perf_counter() - last_time)
+        last_time = time.perf_counter()
+                
     print("Execution time:", time.perf_counter() - start_time)
 
-
-uv = spider_sampling()
-m_op = NUFFT_op(uv)
-# m_op = id_op()
-data_shape = m_op.dir_op(np.zeros((256,256), dtype=complex)).shape
-print(data_shape)
-ISNR = 50
-dist = -1 * np.dot(uv, uv.T) -1 * np.dot(uv, uv.T).T + np.sum(uv**2, axis=1) + np.sum(uv**2, axis=1)[:,np.newaxis] # (x-y)'(x-y) = x'x + y'y - x'y -y'x
-dist[dist < 0] = 0 # correct for numerical errors
-gridsize = 2*np.pi/512
-w = 1/np.sum(dist**.5 < gridsize, axis=1) # all pixels within 1 gridcell distance
-
-# w = 1
-
-ds = Dataset()
-benchmark(
-    ds.prefetch(tf.data.AUTOTUNE)
-        )
+def set_shape(x):
+    a, b = x
+    a.set_shape([256,256,1])
+    b.set_shape([256,256,1])
+    return a, b

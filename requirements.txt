@@ -2,13 +2,16 @@
 -e .
 
 # external requirements (PIP)
-numpy==1.19.2
-matplotlib==3.3.2
+numpy==1.19
+matplotlib==3.3
 astropy==4.1
 pynufft==2020.2.6
-jupyterlab==2.2.9
-scikit-image==0.18.1
-tensorflow==2.4.1
+jupyterlab==2.2
+scikit-image==0.18
+tensorflow==2.5
+pandas
+seaborn
+scipy
 
 # optimus primal ( https://github.com/Luke-Pratley/Optimus-Primal )
-optimusprimal==0.0.1
+##optimusprimal==0.0.1

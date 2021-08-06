@@ -8,7 +8,7 @@ imshow_kwargs = imshow_kwargs = {
     # "origin":'lower'
     }
 
-def compare(images, ncols=None, nrows=None, titles=None, same_scale=False):
+def compare(images, ncols=None, nrows=None, titles=None, same_scale=False, colorbar=False):
     """[summary]
     TODO add colorbars
     Args:
@@ -35,17 +35,22 @@ def compare(images, ncols=None, nrows=None, titles=None, same_scale=False):
     a = ax[0,0].imshow(images[0], **imshow_kwargs)    
     ax[0,0].set_title(titles[0])
     vmin, vmax = a.get_clim()
-    for i in range(1, ncols):
-        for j in range(nrows):
+    for i in range(0, nrows):
+        for j in range(ncols):
             if same_scale:
-                ax[j, i].imshow(images[i +j*nrows], 
+                im = ax[i,j].imshow(images[j + i*ncols], 
                     **imshow_kwargs, vmin=vmin, vmax=vmax)
             else:
-                ax[j, i].imshow(images[i +j*nrows], **imshow_kwargs)
-            ax[j, i].set_title(titles[i +j*nrows])
+                im = ax[i,j].imshow(images[j + i*ncols], **imshow_kwargs)
+            ax[i,j].set_title(titles[j + i*ncols])
 
             if i +j*nrows >= len(images):
                 break
+            if colorbar:
+                plt.colorbar(im, ax=ax[i,j], fraction=0.046, pad=0.04)
+            ax[i,j].set_xticks([])
+            ax[i,j].set_yticks([])
+            
     plt.show()
 
 def visualise_benchmark(results):

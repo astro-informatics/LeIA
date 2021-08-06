@@ -101,3 +101,4 @@ class FFT_op():
         y = self.dir_op(x)
         x = self.adj_op(y)
         return x
+    

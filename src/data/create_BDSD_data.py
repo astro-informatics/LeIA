@@ -14,7 +14,7 @@ def measure(x, m_op, ISNR, weights):
     noise = np.random.normal(0, sigma, y0.shape) + 1j * np.random.normal(0, sigma, y0.shape)
     y = y0 + noise
     x_filtered = m_op.adj_op(y*weights)
-    noise_val = np.std((m_op.adj_op(noise)))
+    noise_val = np.sqrt(2)*sigma #np.std((m_op.adj_op(noise)))
     return y, x_filtered.real, noise_val
 
 
@@ -61,17 +61,17 @@ dist[dist < 0] = 0 # correct for numerical errors
 gridsize = 2*np.pi/512
 w = 1/np.sum(dist**.5 < gridsize, axis=1) # all pixels within 1 gridcell distancex_f = m_op.adj_op(y_*w/w.max())
 
-create_dataset(m_op, measurement_weights=w, ISNR=50, 
-    directory="./data/BSR/BSDS500/data/images/train/",
-    save_postfix="train_50dB")
+# create_dataset(m_op, measurement_weights=w, ISNR=50, 
+#     directory="./data/BSR/BSDS500/data/images/train/",
+#     save_postfix="train_50dB")
 
 create_dataset(m_op, measurement_weights=w, ISNR=30, 
-    directory="./data/BSR/BSDS500/data/images/train/",
+    directory="./data/val2017/",
     save_postfix="train_30dB")
 
-create_dataset(m_op, measurement_weights=w, ISNR=50, 
-    directory="./data/BSR/BSDS500/data/images/test/",
-    save_postfix="test_50dB")
+# create_dataset(m_op, measurement_weights=w, ISNR=50, 
+#     directory="./data/BSR/BSDS500/data/images/test/",
+#     save_postfix="test_50dB")
 
 create_dataset(m_op, measurement_weights=w, ISNR=30, 
     directory="./data/BSR/BSDS500/data/images/test/",
