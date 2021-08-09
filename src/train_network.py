@@ -50,7 +50,7 @@ def load_data(data_folder, ISNR=30):
 
     return x_true, x_dirty, y_dirty, x_true_test, x_dirty_test, y_dirty_test
 
-x_true, x_dirty, y_dirty, x_true_test, x_dirty_test, y_dirty_test = load_data()
+x_true, x_dirty, y_dirty, x_true_test, x_dirty_test, y_dirty_test = load_data(data_folder)
 
 
 def preprocess(x, m=None, s=None):
