@@ -2,24 +2,36 @@
 # import segementation_models as sm
 import tensorflow as tf
 import numpy as np
-from src.operators.measurement import NUFFT_op_TF
+from src.operators.measurement import NUFFT_op
 
 from tensorflow.python.framework.ops import disable_eager_execution
 disable_eager_execution()
 
 class Gradient(tf.keras.layers.Layer):
-    def __init__(self, m_op):
+    def __init__(self, m_op, shape_x, shape_y, depth):
         self.m_op = m_op
-        # self.data = tf.convert_to_tensor(data)
+        self.input_spec = [
+            tf.keras.layers.InputSpec(
+                dtype=tf.float32,
+                shape=shape_x
+            ),
+            tf.keras.layers.InputSpec(
+                dtype=tf.complex128,
+                shape=shape_y
+            )
+        ]
+        self.depth = depth +1
+        self.trainable=False
     
-    # @tf.function(input_signature=[tf.TensorSpec( ], dtype=tf.float32)])
-    # @tf.function(input_signature=[tf.TensorSpec( [None, 128,128,1], dtype=tf.float32), tf.TensorSpec( [None, 1, 4432], dtype=tf.complex64)])
+
     def __call__(self, x, y):
-        # x = tf.reshape(x, [1, x.shape[0], x.shape[1], x.shape[2]])
-        x = tf.cast(x, tf.complex64)
-        m = self.m_op.dir_op(x) 
-        res = m -  tf.reshape(y, [1, -1, y.shape[1]])
-        return tf.cast(self.m_op.adj_op( res ), tf.float32)[0, :,:,:, None]
+        x = tf.cast(x, tf.complex128)
+        m = self.m_op.forward(x) 
+        size = y.shape[1]
+        res = m -  y
+        grad = self.m_op.adjoint( res )
+        return tf.cast(grad, tf.float32)
+
 
 class fft_op():
     def __init__(self,):
@@ -53,7 +65,15 @@ class fft_op():
             )
         )
 
+class TF_nufft(NUFFT_op):
+    """ Tensorfow adaptation of the nufft operator""" 
+    def forward(self, x):
+        return tf.numpy_function(self.dir_op, [x], tf.complex128)
 
+    def adjoint(self, x):
+        return tf.numpy_function(self.adj_op, [x], tf.complex128)
+
+    
 class Gradient_2(tf.keras.layers.Layer):
     def __init__(self, m_op, shape, depth):
         self.m_op = m_op
@@ -63,7 +83,7 @@ class Gradient_2(tf.keras.layers.Layer):
                 shape=shape
             ),
             tf.keras.layers.InputSpec(
-                dtype=tf.complex64,
+                dtype=tf.complex128,
                 shape=shape
             )
         ]
@@ -72,7 +92,7 @@ class Gradient_2(tf.keras.layers.Layer):
     
 
     def __call__(self, x, y):
-        x = tf.cast(x, tf.complex64)
+        x = tf.cast(x, tf.complex128)
         m = self.m_op.dir_op(x) 
         size = y.shape[1]
         y = y[
@@ -85,12 +105,11 @@ class Gradient_2(tf.keras.layers.Layer):
         return tf.cast(a, tf.float32)
 
 class Unet(tf.keras.Model):
-    def __init__(self, input_shape, uv, depth=2, start_filters=16, conv_layers=1, kernel_size=3, conv_activation='relu', output_activation='linear'):
+    def __init__(self, input_shape, uv, depth=2, start_filters=16, conv_layers=1, kernel_size=3, conv_activation='relu', output_activation='linear', grad=False):
         self.is_adapted=False
         inputs = tf.keras.Input(input_shape)
        
-#         inputs2 = tf.keras.Input([len(uv),1], dtype=tf.complex64) # individual measurements
-        inputs2 = tf.keras.Input(input_shape, dtype=tf.complex64) # fourier plane
+        # inputs2 = tf.keras.Input(input_shape, dtype=tf.complex128) # fourier plane
 
         #TODO preprocessing (also on batch)
         #TODO upsampled FFT gradient
@@ -99,23 +118,26 @@ class Unet(tf.keras.Model):
 
         skips = []
 
-        # construct gradient operators
-        gradient_ops = []
-        Nd = input_shape[0]
-        Kd = input_shape[0]*2
 
-        i= 0
-#         op = NUFFT_op_TF(uv.T, Nd=(Nd//(2**i),Nd//(2**i)), Kd=(Kd//(2**i),Kd//(2**i)), Jd=(6,6))
-#         gradient_layer = Gradient(op)
+        Nd = (input_shape[0], input_shape[1])
+        Kd = (Nd[0]*2, Nd[1]*2)
+        Jd = (6,6)
 
-        op = fft_op()
-
-        
-#         with tf.name_scope("Grad"):
-#             grad = gradient_layer(x[:,:,:,0], inputs2[:,:,0])
-
-#         x = tf.keras.layers.Concatenate()([x,grad])
+        if grad:
+            inputs2 = tf.keras.Input([len(uv),1], dtype=tf.complex128) # individual measurements
+            # construct gradient operators
+            gradient_ops = []
+            subsampled_inputs = []
     
+
+            for i in range(depth):
+                m_op = TF_nufft()
+                nd, kd = (Nd[0]//2**i, Nd[1]//2**i), (Kd[0]//2**i, Kd[1]//2**i)
+                print(nd, kd)
+                sel = np.linalg.norm(uv, axis=1) < np.pi / 2**i
+                m_op.plan(uv[sel], nd, kd, Jd)
+                gradient_ops.append( Gradient(m_op, [None, nd[0], nd[1]], [None, np.sum(sel)], i) )
+                subsampled_inputs.append(tf.boolean_mask(inputs2, sel, axis=1))
 
         #x = self.preprocess(inputs)
 #         x = inputs
@@ -124,15 +146,14 @@ class Unet(tf.keras.Model):
         # convolution downward
         for i in range(depth):
             
-            shape = (None, Nd//2**i, Nd//2**i)
+            shape = (None, Nd[0]//2**i, Nd[1]//2**i)
             
-            # gradients
-            with tf.name_scope("Grad_" +str(i)):
-    
-                gradient_layer = Gradient_2(op, shape, i)
-
-                grad = gradient_layer(x[:,:,:,0], inputs2[:,:,:,0])
-                x = tf.keras.layers.Concatenate()([x,grad[:,:,:, None]])
+            if grad:
+                # gradients
+                with tf.name_scope("Grad_" +str(i)):
+                    gradi = gradient_ops[i](x[:,:,:,0], subsampled_inputs[i][:,:,0])
+                    gradi.set_shape(shape)
+                    x = tf.keras.layers.Concatenate()([x, gradi[:,:,:, None]])
             
             
             for j in range(conv_layers):
@@ -187,8 +208,11 @@ class Unet(tf.keras.Model):
                     name="conv2d_output"
                     )(x)
 
-        super().__init__(inputs=[inputs, inputs2], outputs=outputs)
-    
+        if grad:
+            super().__init__(inputs=[inputs, inputs2], outputs=outputs)
+        else:
+            super().__init__(inputs=[inputs], outputs=outputs)
+
         self.compile(optimizer='adam', loss= tf.keras.losses.MSE)
 
 #     def fit(self, x, y, **kwargs):

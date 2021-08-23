@@ -12,6 +12,7 @@ tensorflow==2.5
 pandas
 seaborn
 scipy
+sparse
 
 # optimus primal ( https://github.com/Luke-Pratley/Optimus-Primal )
 ##optimusprimal==0.0.1

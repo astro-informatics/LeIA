@@ -81,12 +81,12 @@ def measurement(x, m_op, ISNR, data_shape, w):
     
     x_dirty = m_op.adj_op(y*w).real
 #     fft = lambda x: tf.signal.fftshift(tf.signal.fft2d(tf.signal.fftshift(x, axes=(-2,-1))), axes=(-2,-1))
-    fft = lambda x: np.fft.fftshift(np.fft.fft2(np.fft.fftshift(x), norm='ortho'))
+    # fft = lambda x: np.fft.fftshift(np.fft.fft2(np.fft.fftshift(x), norm='ortho'))
     
-    y_dirty = fft(x_dirty +0j)
+    y_dirty = y
 #     return ((x_dirty.reshape(256,256,1), y.reshape(4440,1)), x.reshape(256,256,1))
 #     print(x_dirty.shape, y_dirty.shape)
-    return (x_dirty.reshape(256,256,1), y_dirty.reshape(256,256,1), x.reshape(256,256,1))
+    return (x_dirty.reshape(256,256,1).astype(np.float32), y_dirty.reshape(4440,1).astype(np.complex128), x.reshape(256,256,1).astype(np.float32))
 #     return (x_dirty, y_dirty, x)
 
 # @tf.function(input_signature=[tf.TensorSpec(None, tf.float32)])
@@ -97,7 +97,8 @@ def measurement(x, m_op, ISNR, data_shape, w):
 def measurement_func(ISNR=50, data_shape=(4440,)):
     """function for getting a tf function version of the measurment function"""
     uv = spider_sampling()
-    m_op = NUFFT_op(uv)
+    m_op = NUFFT_op()
+    m_op.plan(uv, (256,256), (512,512), (6,6))
 
     grid_cell = 2*np.pi /512 
     binned = (uv[:,:]+np.pi+.5*grid_cell) // grid_cell
@@ -116,7 +117,7 @@ def measurement_func(ISNR=50, data_shape=(4440,)):
 
     @tf.function(input_signature=[tf.TensorSpec(None, tf.float32)])
     def tf_function(x):
-#         return tf.numpy_function(func, [x], ((tf.float32, tf.complex64), tf.float32))
+#         return tf.numpy_function(func, [x], ((tf.float32, tf.complex128), tf.float32))
         return tf.numpy_function(func, [x], (tf.float32, tf.complex128, tf.float32))
 
     return tf_function, func
@@ -128,7 +129,7 @@ def data_map(x,y,z):
 #     x = tf.expand_dims(x, 3)
     x.set_shape([None,256,256,1])
 #     y = tf.expand_dims(y, 3)
-    y.set_shape([None,256,256,1])
+    y.set_shape([None,4440,1])
 #     z = tf.expand_dims(z, 3)
     z.set_shape([None,256,256,1])
     return (x, y), z
