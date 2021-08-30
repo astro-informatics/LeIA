@@ -58,7 +58,7 @@ class NUFFT_op():
         pass
         # TODO generalise more, (pick axes, norm, etc.)
         
-    def plan(self, uv, Nd, Kd, Jd):
+    def plan(self, uv, Nd, Kd, Jd, batch_size=None):
         # saving some values
         self.Nd = Nd
         self.Kd = Kd
@@ -189,6 +189,8 @@ class NUFFT_op_TF():
         xx = (np.arange(Kd[0])/Kd[0] -.5)[Kd[0]//4:-Kd[0]//4]
         sa = s_kb(xx).real
         self.scaling = (sa.reshape(-1,1) * sa.reshape(1,-1)).reshape(1, Nd[0], Nd[0])
+        self.forward = self.dir_op
+        self.adjoint = self.adj_op
 
     def dir_op(self, xx):
         xx = tf.cast(xx, tf.complex64)

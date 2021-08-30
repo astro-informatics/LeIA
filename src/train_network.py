@@ -21,7 +21,7 @@ grad = bool(int(sys.argv[6]))
 set_size = int(sys.argv[7])
 
 train_time = 10*60 # time after which training should stop in mins
-i = 1
+i = 4
 # grad = False # 40x slower (27x)
 if grad:
     postfix = "_" + activation + "_grad_new_" + str(i)

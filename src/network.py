@@ -2,7 +2,7 @@
 # import segementation_models as sm
 import tensorflow as tf
 import numpy as np
-from src.operators.measurement import NUFFT_op
+from src.operators.measurement import NUFFT_op, NUFFT_op_TF
 
 from tensorflow.python.framework.ops import disable_eager_execution
 disable_eager_execution()
@@ -16,7 +16,7 @@ class Gradient(tf.keras.layers.Layer):
                 shape=shape_x
             ),
             tf.keras.layers.InputSpec(
-                dtype=tf.complex128,
+                dtype=tf.complex64,
                 shape=shape_y
             )
         ]
@@ -25,7 +25,7 @@ class Gradient(tf.keras.layers.Layer):
     
 
     def __call__(self, x, y):
-        x = tf.cast(x, tf.complex128)
+        x = tf.cast(x, tf.complex64)
         m = self.m_op.forward(x) 
         size = y.shape[1]
         res = m -  y
@@ -68,10 +68,10 @@ class fft_op():
 class TF_nufft(NUFFT_op):
     """ Tensorfow adaptation of the nufft operator""" 
     def forward(self, x):
-        return tf.numpy_function(self.dir_op, [x], tf.complex128)
+        return tf.numpy_function(self.dir_op, [x], tf.complex64)
 
     def adjoint(self, x):
-        return tf.numpy_function(self.adj_op, [x], tf.complex128)
+        return tf.numpy_function(self.adj_op, [x], tf.complex64)
 
     
 class Gradient_2(tf.keras.layers.Layer):
@@ -83,7 +83,7 @@ class Gradient_2(tf.keras.layers.Layer):
                 shape=shape
             ),
             tf.keras.layers.InputSpec(
-                dtype=tf.complex128,
+                dtype=tf.complex64,
                 shape=shape
             )
         ]
@@ -92,7 +92,7 @@ class Gradient_2(tf.keras.layers.Layer):
     
 
     def __call__(self, x, y):
-        x = tf.cast(x, tf.complex128)
+        x = tf.cast(x, tf.complex64)
         m = self.m_op.dir_op(x) 
         size = y.shape[1]
         y = y[
@@ -106,10 +106,13 @@ class Gradient_2(tf.keras.layers.Layer):
 
 class Unet(tf.keras.Model):
     def __init__(self, input_shape, uv, depth=2, start_filters=16, conv_layers=1, kernel_size=3, conv_activation='relu', output_activation='linear', grad=False):
+        grad_on_upsample = True
+
+        batch_size = 20
         self.is_adapted=False
         inputs = tf.keras.Input(input_shape)
        
-        # inputs2 = tf.keras.Input(input_shape, dtype=tf.complex128) # fourier plane
+        # inputs2 = tf.keras.Input(input_shape, dtype=tf.complex64) # fourier plane
 
         #TODO preprocessing (also on batch)
         #TODO upsampled FFT gradient
@@ -124,18 +127,18 @@ class Unet(tf.keras.Model):
         Jd = (6,6)
 
         if grad:
-            inputs2 = tf.keras.Input([len(uv),1], dtype=tf.complex128) # individual measurements
+            inputs2 = tf.keras.Input([len(uv),1], dtype=tf.complex64) # individual measurements
             # construct gradient operators
             gradient_ops = []
             subsampled_inputs = []
     
 
             for i in range(depth):
-                m_op = TF_nufft()
+                m_op = TF_nufft() # numpy function tf operator
+                # m_op = NUFFT_op_TF() # TF native operator
                 nd, kd = (Nd[0]//2**i, Nd[1]//2**i), (Kd[0]//2**i, Kd[1]//2**i)
-                print(nd, kd)
                 sel = np.linalg.norm(uv, axis=1) < np.pi / 2**i
-                m_op.plan(uv[sel], nd, kd, Jd)
+                m_op.plan(uv[sel], nd, kd, Jd, batch_size)
                 gradient_ops.append( Gradient(m_op, [None, nd[0], nd[1]], [None, np.sum(sel)], i) )
                 subsampled_inputs.append(tf.boolean_mask(inputs2, sel, axis=1))
 
@@ -184,8 +187,19 @@ class Unet(tf.keras.Model):
 
         # convolutions upward
         for i in range(depth):
+            shape = (None, Nd[0]//2**(depth-i-1), Nd[1]//2**(depth-i-1))
+
             x = tf.keras.layers.UpSampling2D()(x)
+
+            if grad and grad_on_upsample:
+                # gradients
+                with tf.name_scope("Grad_up_" +str(i)):
+                    gradi = gradient_ops[-(i+1)](x[:,:,:,0], subsampled_inputs[-(i+1)][:,:,0])
+                    gradi.set_shape(shape)
+                    x = tf.keras.layers.Concatenate()([x, gradi[:,:,:, None]])
+            
             x = tf.keras.layers.Concatenate()([x,skips[-(i+1)]])
+
 
             for j in range(conv_layers):
                 x = tf.keras.layers.Conv2D(

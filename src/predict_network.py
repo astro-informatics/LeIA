@@ -27,7 +27,8 @@ else:
 
 project_folder = os.environ["HOME"] + "/src_aiai/"
 data_folder = project_folder + f"data/intermediate/{data}"
-
+checkpoint_folder = project_folder+ f"models/{data}/{network}_{ISNR}dB{postfix}"
+checkpoint_path = checkpoint_folder + "/cp-{epoch:04d}.ckpt"
 
 def load_data(data_folder, ISNR=30):
     """load the pre-computed train and test data"""
@@ -37,7 +38,7 @@ def load_data(data_folder, ISNR=30):
     print("Loading train data")
     x_true = np.load(data_folder+ f"/x_true_train_{ISNR}dB.npy")
     x_dirty = np.load(data_folder+ f"/x_dirty_train_{ISNR}dB.npy")
-    y_dirty = np.load(project_folder + f"./data/intermediate/{data}/y_dirty_train_{ISNR}dB.npy").reshape( -1,4440)
+    y_dirty = np.load(project_folder + f"./data/intermediate/{data}/y_dirty_train_{ISNR}dB.npy").reshape( -1,4440,1)
     
     # print("Creating fft grid train")
     # y_dirty = fft(x_dirty)
@@ -45,7 +46,7 @@ def load_data(data_folder, ISNR=30):
     print("Loading test data")
     x_true_test = np.load( data_folder+ f"/x_true_test_{ISNR}dB.npy")
     x_dirty_test = np.load( data_folder+ f"/x_dirty_test_{ISNR}dB.npy")
-    y_dirty_test = np.load(project_folder + f"./data/intermediate/{data}/y_dirty_train_{ISNR}dB.npy").reshape( -1,4440)
+    y_dirty_test = np.load(project_folder + f"./data/intermediate/{data}/y_dirty_train_{ISNR}dB.npy").reshape( -1,4440,1)
     
     # print("Creating fft grid test")
     # y_dirty_test = fft(x_dirty_test)
