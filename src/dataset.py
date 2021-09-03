@@ -79,14 +79,16 @@ def measurement(x, m_op, ISNR, data_shape, w):
     n = np.random.normal( 0, sigma, data_shape) + 1j * np.random.normal( 0, sigma, data_shape)
     y = y0 + n
     
-    x_dirty = m_op.adj_op(y*w).real
+#     x_dirty = m_op.adj_op(y*w).real
 #     fft = lambda x: tf.signal.fftshift(tf.signal.fft2d(tf.signal.fftshift(x, axes=(-2,-1))), axes=(-2,-1))
     # fft = lambda x: np.fft.fftshift(np.fft.fft2(np.fft.fftshift(x), norm='ortho'))
     
     y_dirty = y
 #     return ((x_dirty.reshape(256,256,1), y.reshape(4440,1)), x.reshape(256,256,1))
 #     print(x_dirty.shape, y_dirty.shape)
-    return (x_dirty.reshape(256,256,1).astype(np.float32), y_dirty.reshape(4440,1).astype(np.complex128), x.reshape(256,256,1).astype(np.float32))
+#     return (x_dirty.reshape(256,256,1).astype(np.float32), y_dirty.reshape(4440,1).astype(np.complex128), x.reshape(256,256,1).astype(np.float32))
+    return y_dirty.reshape(4440).astype(np.complex64), x.reshape(256,256).astype(np.float32))
+
 #     return (x_dirty, y_dirty, x)
 
 # @tf.function(input_signature=[tf.TensorSpec(None, tf.float32)])
@@ -118,21 +120,24 @@ def measurement_func(ISNR=50, data_shape=(4440,)):
     @tf.function(input_signature=[tf.TensorSpec(None, tf.float32)])
     def tf_function(x):
 #         return tf.numpy_function(func, [x], ((tf.float32, tf.complex128), tf.float32))
-        return tf.numpy_function(func, [x], (tf.float32, tf.complex128, tf.float32))
+#         return tf.numpy_function(func, [x], (tf.float32, tf.complex128, tf.float32))
+        return tf.numpy_function(func, [x], (tf.complex64, tf.float32))
 
     return tf_function, func
 
 @tf.function()
-def data_map(x,y,z):
+def data_map(y,z):
     """split input and output of train data"""
 #     return {"input_1":x, "input_3":y}, z
 #     x = tf.expand_dims(x, 3)
-    x.set_shape([None,256,256,1])
+#     x.set_shape([None,256,256,1])
 #     y = tf.expand_dims(y, 3)
-    y.set_shape([None,4440,1])
+    y.set_shape([None,4440])
 #     z = tf.expand_dims(z, 3)
-    z.set_shape([None,256,256,1])
-    return (x, y), z
+    z.set_shape([None,256,256])
+#     return (x, y), z
+    return y, z
+
 
 def benchmark(dataset, num_epochs=10):
     start_time = time.perf_counter()

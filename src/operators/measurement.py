@@ -223,16 +223,23 @@ class NUFFT_op_TF():
         """adjoint operation with a convolutional layer between interpolation and FT"""
         # split real and imaginary parts because complex operations not defined for sparseTensors
         k = k[:,:, None, None] # adding axes for sparse multiplication; shape [batch_size, M, 1, 1]
+    
         k_real = tf.math.real(k)
         k_imag = tf.math.imag(k)
-        kk_real = self._k2kk(k_real)[:,:,:,None]
-        kk_imag = self._k2kk(k_imag)[:,:,:,None]
+        # kk_real = self._k2kk(k_real)[:,:,:,None]
+        # kk_imag = self._k2kk(k_imag)[:,:,:,None]
         
+        kk_real = tf.expand_dims(self._k2kk(k_real), axis=3)
+        kk_imag = tf.expand_dims(self._k2kk(k_imag), axis=3)
+
         conv = tf.keras.layers.Conv2D(1, (3,3), activation='relu', padding="same")
         
-        kk_real = tf.cast(conv(kk_real), tf.complex64)[:,:,:,0]
-        kk_imag = tf.cast(conv(kk_imag), tf.complex64)[:,:,:,0]
+        # kk_real = tf.cast(conv(kk_real), tf.complex64)[:,:,:,0]
+        # kk_imag = tf.cast(conv(kk_imag), tf.complex64)[:,:,:,0]
         
+        kk_real = tf.squeeze(tf.cast(conv(kk_real), tf.complex64))
+        kk_imag = tf.squeeze(tf.cast(conv(kk_imag), tf.complex64))
+
         kk = kk_real + 1j* kk_imag
         xx = self._kk2xx(kk)
         xx = self._unpad(xx)
