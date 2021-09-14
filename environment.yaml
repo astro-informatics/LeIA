@@ -1,0 +1,17 @@
+name: env
+dependencies:
+  - python=3.8
+  - numpy=1.19
+  - pandas=1.2
+  - matplotlib=3.3
+  - jupyterlab
+  - scikit-image
+  - scikit-learn
+  - scipy
+  - seaborn
+  - tqdm
+  - git
+  - pip
+  - pip:
+      - tensorflow==2.4
+      - -e .
