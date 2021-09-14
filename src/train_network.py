@@ -97,11 +97,16 @@ def unpreprocess(x, m, s):
 # x_true_dirty, m, s = preprocess(x_true_dirty)
 # x_test_dirty, *_ = preprocess(x_test_dirty)
 
+epochs = 200
+save_freq = 5
+batch_size = 20
+# set_size = 200 # TODO
 
 uv = spider_sampling()
 
 if network == "adjoint":
     depth = 0
+    train_time = 4*60
     grad = False
 elif network == "unet":
     depth = 4
@@ -151,10 +156,7 @@ else:
     
 
 
-epochs = 200
-save_freq = 5
-batch_size = 20
-# set_size = 200 # TODO
+
 
 cp_callback = tf.keras.callbacks.ModelCheckpoint(
     filepath=checkpoint_path, 
@@ -220,9 +222,9 @@ history = model.fit(dataset,
 
 
 print("predict train")
-train_predict = model.predict(y_dirty)
+train_predict = model.predict(y_dirty, batch_size=batch_size)
 print("predict test")
-test_predict = model.predict(y_dirty_test)
+test_predict = model.predict(y_dirty_test, batch_size=batch_size)
 
 print("saving")
 np.save(project_folder + f"data/processed/{data}/train_predict_{network}_{ISNR}dB" + postfix + ".npy", train_predict)

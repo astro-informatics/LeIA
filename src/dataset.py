@@ -87,7 +87,7 @@ def measurement(x, m_op, ISNR, data_shape, w):
 #     return ((x_dirty.reshape(256,256,1), y.reshape(4440,1)), x.reshape(256,256,1))
 #     print(x_dirty.shape, y_dirty.shape)
 #     return (x_dirty.reshape(256,256,1).astype(np.float32), y_dirty.reshape(4440,1).astype(np.complex128), x.reshape(256,256,1).astype(np.float32))
-    return y_dirty.reshape(4440).astype(np.complex64), x.reshape(256,256).astype(np.float32))
+    return y_dirty.reshape(4440).astype(np.complex64), x.reshape(256,256).astype(np.float32)
 
 #     return (x_dirty, y_dirty, x)
 

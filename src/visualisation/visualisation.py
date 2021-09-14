@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 imshow_kwargs = imshow_kwargs = {
 #     "cmap":'afmhot',
-    # "cmap":'gray',
+    "cmap":'gray',
     # "origin":'lower'
     }
 
