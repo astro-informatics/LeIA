@@ -1,6 +1,7 @@
 
+import numpy as np
 import matplotlib.pyplot as plt
-
+import seaborn as sns
 
 imshow_kwargs = imshow_kwargs = {
 #     "cmap":'afmhot',
@@ -63,3 +64,34 @@ def visualise_benchmark(results):
         results["x_true"] -results["solution"]
         ], titles=["x_true", "solution", f"difference (RSE: {results['RSE']:.3e})"])
 
+
+def print_statistics(statistics, results, metrics):
+    print(f"|{'Name':40}|", end="")
+    for metric, f in metrics:
+        print(f"{metric:20}|", end="")
+    print()
+    for name, set, _ in sorted(results):
+        if name in statistics.Method.values:
+            print(f"|{name+'_'+set:40}|", end="")
+            for metric, f in metrics:
+                print(f"{np.mean(statistics[metric][(statistics.Method == name) * (statistics.Set == set)]):8.3f} \pm {np.std(statistics[metric][(statistics.Method == name) * (statistics.Set == set)]):7.3f}|", end="")
+            print()
+
+def plot_statistics(statistics, metrics, ylims=[[0,40], [0,1], [0, 0.04]]):
+    #TODO add some better ytick labels, currently to many/much precision
+    fig, ax = plt.subplots(ncols=len(metrics), figsize=(len(metrics)*8, 6))
+    for idx, (metric, _) in enumerate(metrics):
+        plt.sca(ax[idx])
+        sns.set_style('whitegrid')
+        sns.violinplot(data=statistics, x='Method', y=metric, split=True, hue='Set', palette="Set3", bw=.2, cut=1, linewidth=1, inner='quart', orientation='v')
+#         sns.violinplot(data=statistics, x='Method', y=metric, split=False, hue='Set', palette="Set3", bw=.2, cut=1, linewidth=1, inner='quart', orientation='v')
+        plt.ylabel(metric, fontsize='x-large')
+        plt.xlabel("")
+        ax[idx].tick_params(labelsize='x-large', rotation=90)
+        # ax[idx].xaxis.label.set_size('x-large')
+        sns.despine(left=True, bottom=True)
+        plt.legend(loc="upper left", fontsize='large')
+    ax[0].set_ylim(ylims[0])
+    ax[1].set_ylim(ylims[1])
+    ax[2].set_ylim(ylims[2])
+    plt.show()

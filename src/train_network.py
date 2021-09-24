@@ -7,8 +7,12 @@ import os
 import time
 import sys 
 
+from src.callbacks import PredictionTimeCallback, TimeOutCallback, CSV_logger_plus
 from src.dataset import *
 from src.sampling.uv_sampling import spider_sampling
+
+from util import gpu_setup
+gpu_setup()
 
 st = time.time()
 
@@ -31,7 +35,10 @@ grad_on_upsample = bool(int(sys.argv[7]))
 # 30 dunet sigmoid 0 0 1 0
 # 30 dunet sigmoid 0 0 0 1
 
-data = "COCO"
+# data = "COCO"
+# data = "GZOO"
+data = "LLPS"
+
 set_size = 2000
 
 train_time = 10*60 # time after which training should stop in mins
@@ -137,14 +144,7 @@ model = Unet(
 
 # print(model.summary())
 # exit()
-class CSV_logger_plus(tf.keras.callbacks.CSVLogger):
-    def on_train_begin(self, logs=None):
-        self.t0 = time.time() # start time
-        super().on_train_begin(logs)
-    
-    def on_epoch_end(self, epoch, logs=None):
-        logs['time'] = time.time() - self.t0
-        super().on_epoch_end(epoch, logs)
+
 
 print("loading weights")
 if load_weights:    
@@ -172,44 +172,34 @@ tb_callback = tf.keras.callbacks.TensorBoard(
     profile_batch=2, embeddings_freq=0, embeddings_metadata=None
 )
 
-class TimeOut(tf.keras.callbacks.Callback):
-    """Based on https://stackoverflow.com/questions/58096219/save-a-tensorflow-model-after-a-fixed-training-time"""
-    def __init__(self, timeout, checkpoint_path):
-        super().__init__()
-        self.timeout = timeout  # time in minutes
-        self.checkpoint_path = checkpoint_path
 
-    def on_train_begin(self, logs=None):
-        self.t0 = time.time()
-
-    def on_epoch_end(self, epoch, logs=None):
-        if time.time() - self.t0 > self.timeout * 60: 
-            print(f"\nReached {(time.time() - self.t0) / 60:.3f} minutes of training, stopping")
-            self.model.stop_training = True
-            self.model.save_weights(self.checkpoint_path.format(epoch=epoch+1))
-
-
-to_callback = TimeOut(timeout=train_time, checkpoint_path=checkpoint_path)
+to_callback = TimeOutCallback(timeout=train_time, checkpoint_path=checkpoint_path)
 
 # early_stopping = tf.keras.callbacks.EarlyStopping(patience=100, restore_best_weights=True)
 
 print("creating dataset")
 tf_func, func = measurement_func(ISNR=ISNR)
 ds = Dataset(set_size)
-dataset = ds.cache().map(crop).map(tf_func).shuffle(set_size, reshuffle_each_iteration=True).batch(batch_size).map(data_map).prefetch(tf.data.experimental.AUTOTUNE)
+yogadl_dataset = make_yogadl_dataset(ds) # use yogadl for caching and shuffling the data
+if data == "COCO":
+    dataset = ds.take(200).map(random_crop).map(tf_func).batch(batch_size).map(data_map).prefetch(tf.data.experimental.AUTOTUNE)
+elif data == "GZOO":
+    dataset = ds.take(200).map(center_crop).map(tf_func).batch(batch_size).map(data_map).prefetch(tf.data.experimental.AUTOTUNE)
+elif data == "LLPS":
+    ds = EllipseDataset(set_size)
+    yogadl_dataset = make_yogadl_dataset(ds)
+    dataset = ds.take(200).map(tf_func).batch(batch_size).map(data_map).prefetch(tf.data.experimental.AUTOTUNE)
+
 # data = ds.cache().map(crop).map(tf_func).map(set_shape).prefetch(tf.data.experimental.AUTOTUNE)
 
-#TODO does the fitting just ignore additional inputs?
+#TODO does yogadl shuffle in the 200 or just takes 200 out of 2000 shuffled items (should be latter)
 
 print("training")
-history = model.fit(dataset, 
-                    
-#                     batch_size=32, 
-                    epochs=epochs, 
-#                     validation_data=((x_dirty_test, y_dirty_test), x_true_test),
-#                     validation_steps=50,
-#                     validation_batch_size=20,
-                    callbacks=[cp_callback, csv_logger, to_callback]
+if network != 'adjoint' or learned_adjoint:
+    history = model.fit(
+        dataset, 
+        epochs=epochs, 
+        callbacks=[cp_callback, csv_logger, to_callback]
 )
 
 # history = model.fit(x=[x_dirty, y_dirty], 
@@ -220,16 +210,17 @@ history = model.fit(dataset,
 #                     callbacks=[cp_callback, csv_logger, early_stopping])
 
 
+pt_callback = PredictionTimeCallback(project_folder + f"/results/{data}/summary.csv", batch_size) 
 
 print("predict train")
-train_predict = model.predict(y_dirty, batch_size=batch_size)
+train_predict = model.predict(y_dirty, batch_size=batch_size, callbacks=[pt_callback])
 print("predict test")
 test_predict = model.predict(y_dirty_test, batch_size=batch_size)
 
 print("saving")
 np.save(project_folder + f"data/processed/{data}/train_predict_{network}_{ISNR}dB" + postfix + ".npy", train_predict)
 np.save(project_folder + f"data/processed/{data}/test_predict_{network}_{ISNR}dB" + postfix + ".npy", test_predict)
-# pickle.dump(history.history, open(project_folder + f"results/{data}/history_{network}_{ISNR}dB" + postfix + ".pkl", "wb"))
+pickle.dump(history.history, open(project_folder + f"results/{data}/history_{network}_{ISNR}dB" + postfix + ".pkl", "wb"))
 
 
 # print("it took:",  (time.time()-st)/60, "mins")

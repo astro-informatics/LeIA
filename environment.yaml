@@ -15,3 +15,4 @@ dependencies:
   - pip:
       - tensorflow==2.4
       - -e .
+      - yogadl==0.1.4

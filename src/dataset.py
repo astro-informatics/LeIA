@@ -8,7 +8,8 @@ import numpy as np
 import os
 import glob
 from functools import partial
-
+import yogadl
+import yogadl.storage
 
 class id_op():
     @staticmethod
@@ -23,22 +24,18 @@ class id_op():
 
 
 class Dataset(tf.data.Dataset):
-    def __init__(self, m_op=id_op(), ISNR=50, weights=1):
-        super().__init__()
-        self.ISNR = ISNR
-        self.weights = 1
 
     @staticmethod
-    def _generator(num_samples):
-        # Opening the file
-#         files = glob.glob(os.environ["HOME"] + "/src_aiai/data/val2017/*.jpg")
-        files = np.loadtxt(os.environ["HOME"] + 
-            "/src_aiai/images.txt", dtype=str) # only a selection of the files are larger than (256,256)
+    def _generator(num_samples, files=[]):
+
         for sample_idx in range(num_samples):
             if sample_idx >= len(files):
                 print(sample_idx)
             
-            im = io.imread(files[sample_idx], as_gray=True)
+            filename = str(files[sample_idx])
+            if filename.startswith("b\'"): # filter out some weird behaviour with byte strings
+                filename = filename[2:-1]
+            im = io.imread(filename, as_gray=True)
             if type(im[0,0]) == np.uint8: # some images are in uint for some reason
                 im = im/ 255.
             im = im[:,:, np.newaxis] # reshaping to (None, None, 1)
@@ -52,24 +49,97 @@ class Dataset(tf.data.Dataset):
 
             yield im
 
+    def __new__(cls, num_samples=200, data="COCO"):
+
+        if data == "COCO":
+            files = np.loadtxt(os.environ["HOME"] + 
+                            "/src_aiai/images.txt", dtype=str) # only a selection of the files are larger than (256,256)    
+        elif data == "GZOO":
+            files = glob.glob("./data/galaxy_zoo_train/images_training_rev1/*.jpg")        
+        else: 
+            files = [] # this will not work but catches edge cases
+
+        return tf.data.Dataset.from_generator(
+            cls._generator,
+            output_types= tf.float32,
+            args=(num_samples, files)
+        )
+
+
+def random_ellipses(nlow, nhigh):
+    Nd = 256
+    n = np.random.randint(nlow, nhigh)
+    y,x = np.mgrid[:Nd,:Nd]
+    a = np.random.uniform(0.1, 0.3, size = n).reshape(-1,1,1)*Nd
+    b = np.random.uniform(0.1, 0.3, size = n).reshape(-1,1,1) *Nd
+    # x0 = np.random.uniform(0.2, 0.8, size=n).reshape(-1,1,1) *Nd
+    # y0 = np.random.uniform(0.2, 0.8, size=n).reshape(-1,1,1) *Nd
+
+    r0 = np.random.uniform(0, 0.3, size=n).reshape(-1,1,1) *Nd
+    phi =  np.random.uniform(0, 2*np.pi, size=n).reshape(-1,1,1)
+    
+    x0 = r0*np.cos(phi) + Nd/2
+    y0 = r0*np.sin(phi) + Nd/2
+    
+    p1 = x - x0
+    p2 = y - y0
+
+    theta =  np.random.uniform(0, np.pi, size=n).reshape(-1,1,1) # ellpse rotation
+    amps = np.random.uniform(0.1, 1, size=n).reshape(-1,1,1)  # amplitude
+
+    ell = np.sum( amps* ((p1*np.cos(phi) + p2*np.sin(phi))**2/a**2 + (p1*np.sin(phi) - p2*np.cos(phi))**2/b**2 < 1), axis=0) 
+    return ell /ell.max()
+
+class EllipseDataset(tf.data.Dataset):
+
+    @staticmethod
+    def _generator(num_samples):
+        for i in range(num_samples):
+            im = random_ellipses(7, 10)[:,:,np.newaxis]
+            yield im
+
     def __new__(cls, num_samples=200):
         return tf.data.Dataset.from_generator(
             cls._generator,
-            # output_types=(tf.float32, tf.float32),
             output_types= tf.float32,
-#             output_shapes=(tf.TensorShape([256,256,1]),),
-#             output_signature = tf.TensorSpec(shape = (256,256,1), dtype = tf.uint8),
             args=(num_samples,)
         )
 
 
-def crop(x):
+def make_yogadl_dataset(tf_dataset, storage_path="/tmp/yogadl_cache", shuffle=True):
+    """
+    Creates a dataset which can shuffle much faster than tf.dataset.shuffle"""
+    os.makedirs(storage_path, exist_ok=True)
+    lfs_config = yogadl.storage.LFSConfigurations(storage_path)
+    storage = yogadl.storage.LFSStorage(lfs_config)
+
+    @storage.cacheable('coco', '1')
+    def make_data(dataset):
+        return dataset
+
+    # Get the DataRef from the storage via the decorated function.
+    dataref = make_data(tf_dataset)
+    
+    stream = dataref.stream(
+        shuffle=shuffle,
+        shuffle_seed=42,
+    )
+    return yogadl.tensorflow.make_tf_dataset(stream)
+
+def random_crop(x):
 #     x = tf.cast(x, tf.float32)/255
     data = tf.image.random_crop(x, size=(256,256,1))
     data = tf.image.random_flip_left_right(data)
     data = tf.image.random_flip_up_down(data)
     return data
 
+def center_crop(x):
+#     x = tf.cast(x, tf.float32)/255
+    data = tf.squeeze(x)
+    data = tf.image.resize_with_crop_or_pad(x, 256, 256)
+    data = tf.image.random_flip_left_right(data)
+    data = tf.image.random_flip_up_down(data)
+    return data
 
 
 def measurement(x, m_op, ISNR, data_shape, w):
@@ -96,7 +166,7 @@ def measurement(x, m_op, ISNR, data_shape, w):
 #     return tf.numpy_function(mapping_function, [x], (tf.float32, tf.float32))
 #     # return tf.py_function(mapping_function, [x], (tf.float32, tf.float32))
 
-def measurement_func(ISNR=50, data_shape=(4440,)):
+def measurement_func(ISNR=30, data_shape=(4440,)):
     """function for getting a tf function version of the measurment function"""
     uv = spider_sampling()
     m_op = NUFFT_op()

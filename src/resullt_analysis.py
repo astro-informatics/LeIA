@@ -2,7 +2,7 @@ __requires__= 'numpy>=1.16.5'
 import pkg_resources
 pkg_resources.require('numpy>=1.16.5')
 import numpy as np
-
+import sys
 import pickle
 import tqdm
 
@@ -15,13 +15,15 @@ from src.visualisation import compare
 from skimage.metrics import structural_similarity, peak_signal_noise_ratio, mean_squared_error
 
 
-data = "COCO"
+# data = "COCO"
+data = sys.argv[1]
+
 ISNR = 30
 
 print("load train")
 x_true = np.squeeze(np.load(f"./data/intermediate/{data}/x_true_train_{ISNR}dB.npy"))
 print("load test")
-x_true_test = np.squeeze(np.load(f"./data/intermediate/{data}/x_true_test_50dB.npy"))
+x_true_test = np.squeeze(np.load(f"./data/intermediate/{data}/x_true_test_{ISNR}dB.npy"))
 
 print("define datasets")
 name_net_post = [
@@ -77,7 +79,7 @@ for j in  tqdm.tqdm(range(len(results))):
                 statistics = df
             else:
                 statistics = statistics.append(df, ignore_index=False)
-        examples.append((name, dset, pred[:n_examples], x[:n_examples]))
+        examples.append((name, dset, pred[:n_examples]))
     except:
         pass
 
@@ -85,46 +87,46 @@ print("saving results")
 with pd.option_context('mode.use_inf_as_na', True):
     statistics.dropna(inplace=True)
     
-pickle.dump(examples, open("examples.pkl", "wb"))
-statistics.to_csv("statistics.csv")
+pickle.dump(examples, open(f"./results/{data}/examples.pkl", "wb"))
+statistics.to_csv(f"./results/{data}/statistics.csv")
 
 
+if data == "COCO":
+    # robustness data
 
-# # robustness data
+    results = []
+    results += [(name, "Test", f"./data/processed/{data}/test_predict_{net}_robustness{post}.npy") for name, net, post in name_net_post]
 
-# results = []
-# results += [(name, "Test", f"./data/processed/{data}/test_predict_{net}_robustness{post}.npy") for name, net, post in name_net_post]
+    statistics = pd.DataFrame(columns=["PSNR", "SSIM", "MSE", "method", "set"])#{}
 
-# statistics = pd.DataFrame(columns=["PSNR", "SSIM", "MSE", "method", "set"])#{}
+    sigmas = np.repeat(np.arange(30,10,-2.5), 200)
+    x_test = np.load(f"./data/intermediate/x_true_test_robustness.npy")
 
-# sigmas = np.repeat(np.arange(30,10,-2.5), 200)
-# x_test = np.load(f"./data/intermediate/x_true_test_robustness.npy")
+    for j in  tqdm.tqdm(range(len(results))):
+    # for j in tqdm.tqdm(range(1)):
+        name, dset, pred_path = results[j]
 
-# for j in  tqdm.tqdm(range(len(results))):
-# # for j in tqdm.tqdm(range(1)):
-#     name, dset, pred_path = results[j]
-    
 
-#     try:
-#         pred = np.squeeze( np.load(pred_path) )
-#         df = pd.DataFrame()
-#         for metric, f in metrics:
-#             x = x_test
-#             df[metric] = [f(x[i], pred[i]) for i in range(len(x))]
-#             df['Method'] = name
-#             df['Noise'] = sigmas
-#             if statistics.empty:
-#                 statistics = df
-#             else:
-#                 statistics = statistics.append(df, ignore_index=False)
-# #         examples.append((name, dset, pred[0]))
-#     except:
-#         pass
-    
+        try:
+            pred = np.squeeze( np.load(pred_path) )
+            df = pd.DataFrame()
+            for metric, f in metrics:
+                x = x_test
+                df[metric] = [f(x[i], pred[i]) for i in range(len(x))]
+                df['Method'] = name
+                df['Noise'] = sigmas
+                if statistics.empty:
+                    statistics = df
+                else:
+                    statistics = statistics.append(df, ignore_index=False)
+    #         examples.append((name, dset, pred[0]))
+        except:
+            pass
 
-# print("saving results")
-# # with pd.option_context('mode.use_inf_as_na', True):
-# #     statistics.dropna(inplace=True)
-    
-# # pickle.dump(examples, open("examples_robustness.pkl", "wb"))
-# statistics.to_csv("statistics_robustness.csv")
+
+    print("saving results")
+    # with pd.option_context('mode.use_inf_as_na', True):
+    #     statistics.dropna(inplace=True)
+
+    # pickle.dump(examples, open("examples_robustness.pkl", "wb"))
+    statistics.to_csv(f"{data}_statistics_robustness.csv")

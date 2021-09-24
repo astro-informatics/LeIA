@@ -6,8 +6,12 @@ import pickle
 import os
 import time
 import sys 
-
 from src.sampling.uv_sampling import spider_sampling
+from src.callbacks import PredictionTimeCallback
+from util import gpu_setup
+gpu_setup()
+
+
 
 ISNR = int(sys.argv[1])
 network = sys.argv[2] # adjoint, unet, dunet
@@ -19,6 +23,10 @@ grad_on_upsample = bool(int(sys.argv[7]))
 
 i = 0
 data = "COCO"
+data = "GZOO"
+# data = "LLPS"
+
+
 
 postfix = "_" + activation
 
@@ -63,7 +71,7 @@ def load_data(data_folder, ISNR=30):
 # x_true, x_dirty, y_dirty, x_true_test, x_dirty_test, y_dirty_test = load_data(data_folder)
 y_dirty = np.load(project_folder + f"./data/intermediate/{data}/y_dirty_train_{ISNR}dB.npy").reshape( -1,4440)
 y_dirty_test = np.load(project_folder + f"./data/intermediate/{data}/y_dirty_test_{ISNR}dB.npy").reshape( -1,4440)
-
+# y_dirty_test = np.load(project_folder + "/test.npy").reshape( -1,4440)
 
 uv = spider_sampling()
 
@@ -100,20 +108,23 @@ model = Unet(
 # exit()
 
 print("loading weights")
+if network != "adjoint" or learned_adjoint:
+    latest = tf.train.latest_checkpoint(checkpoint_folder)
+    model.load_weights(latest)
 
-latest = tf.train.latest_checkpoint(checkpoint_folder)
-model.load_weights(latest)
 
-
+batch_size = 20
+pt_callback = PredictionTimeCallback(project_folder + f"/results/{data}/summary.csv", batch_size) 
+    
 print("predict train")
-train_predict = model.predict(y_dirty, batch_size=20)
+train_predict = model.predict(y_dirty, batch_size=batch_size, callbacks=[pt_callback])
 print("predict test")
-test_predict = model.predict(y_dirty_test, batch_size=20)
+test_predict = model.predict(y_dirty_test, batch_size=batch_size)
 
-y_dirty_test_robust = np.load(project_folder + "/data/intermediate/y_dirty_test_robustness.npy")
-print("predict")
-test_predict = model.predict(y_dirty_test_robust, batch_size=20)
-np.save(project_folder + f"data/processed/{data}/test_predict_{network}_robustness" + postfix + ".npy", test_predict)
+# y_dirty_test_robust = np.load(project_folder + "/data/intermediate/y_dirty_test_robustness.npy")
+# print("predict")
+# test_predict_robust = model.predict(y_dirty_test_robust, batch_size=20)
+# np.save(project_folder + f"data/processed/{data}/test_predict_{network}_robustness" + postfix + ".npy", test_predict_robust)
 
 print("saving")
 np.save(project_folder + f"data/processed/{data}/train_predict_{network}_{ISNR}dB" + postfix + ".npy", train_predict)

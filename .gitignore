@@ -10,3 +10,8 @@ data/
 models/
 results/
 logs/
+
+*.pkl
+*.npy
+*.csv
+notebooks/archive/
