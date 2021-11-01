@@ -36,14 +36,15 @@ class CSV_logger_plus(tf.keras.callbacks.CSVLogger):
 class PredictionTimeCallback(tf.keras.callbacks.Callback):    
     def __init__(self, filename, batch_size=1):
         self.csv_file = open(filename, "w")
-        self.timings = []
+        self.begin_timings = []
+        self.end_timings = []
         self.batch_size = batch_size # for outputting time per sample
 
-    def on_predict_begin(self, logs=None):
-        self.t0 = time.time()
+    def on_predict_batch_begin(self, batch, logs=None):
+        self.begin_timings.append(time.time())
 
     def on_predict_batch_end(self, batch, logs=None):
-        self.timings.append(time.time())
+        self.end_timings.append(time.time())
 
     def on_predict_end(self, logs=None):        
         if hasattr(self.model, '_collected_trainable_weights'):
@@ -53,7 +54,7 @@ class PredictionTimeCallback(tf.keras.callbacks.Callback):
 
         non_trainable_count = self.count_params(self.model.non_trainable_weights)
 
-        self.timings = np.array(self.timings) - self.t0
+        self.timings = np.array(self.end_timings) - np.array(self.begin_timings)
         self.csv_file.write("Mean time,{}\n".format(np.mean(self.timings/self.batch_size)))
         self.csv_file.write("Std time,{}\n".format(np.std(self.timings/self.batch_size)))
         self.csv_file.write('Total params,{}\n'.format(trainable_count + non_trainable_count))

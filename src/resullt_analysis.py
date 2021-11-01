@@ -1,6 +1,6 @@
-__requires__= 'numpy>=1.16.5'
-import pkg_resources
-pkg_resources.require('numpy>=1.16.5')
+# __requires__= 'numpy>=1.16.5'
+# import pkg_resources
+# pkg_resources.require('numpy>=1.16.5')
 import numpy as np
 import sys
 import pickle
@@ -37,6 +37,11 @@ name_net_post = [
     ("dU-net learned adjoint", "dunet", "_sigmoid_learned_adjoint"),
     ("dU-net learned grad", "dunet", "_sigmoid_learned_grad"),
     ("dU-net grad upsample", "dunet", "_sigmoid_upsample_grad"),
+    ("U-net long", "unet", "_sigmoid_long"),
+    ("dU-net dirty", "dunet", "_sigmoid_upsample_grad_dirty"),
+    
+    ("U-net same", "unet", "_sigmoid_same"),
+    ("dU-net same", "dunet", "_sigmoid_same"),
 ]
 
 

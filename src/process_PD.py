@@ -1,6 +1,6 @@
-__requires__= 'scipy==1.6.3'
-import pkg_resources
-pkg_resources.require('scipy==1.6.3')
+# __requires__= 'scipy==1.6.3'
+# import pkg_resources
+# pkg_resources.require('scipy==1.6.3')
 import scipy
 
 import numpy as np
@@ -31,11 +31,13 @@ if mode == "train":
     try:
         predict_x = np.load(project_folder + f"data/processed/{data}/PD_train_predict_{ISNR}dB.npy")
         timings = np.load(project_folder + f"data/processed/{data}/times_train_{ISNR}dB.npy")
+        diags = pickle.load(open(project_folder + f"results/{data}/diag_{ISNR}dB.npy", "rb"))
     except:
         predict_x = np.zeros_like(x_true)
         timings = np.zeros(len(predict_x))
+        diags = [None] * len(predict_x)
 
-    # ASSUMING WE NOW THE NOISE VALUE
+    # ASSUMING WE KNOW THE NOISE VALUE
 
 elif mode == "test":
     x_true = np.load(project_folder + f"data/intermediate/{data}/x_true_test_{ISNR}dB.npy")
@@ -51,13 +53,14 @@ elif mode == "test":
         
         
 uv = spider_sampling()
-m_op = NUFFT_op(uv)
+m_op = NUFFT_op()
+m_op.plan(uv, (256,256), (512, 512), (6,6))
 
 psi = wavelet_basis(x_true[0,:,:,0].shape)
 solver = PrimalDual_l1_constrained(m_op=m_op, psi=psi, beta=1e-2,
     options={
         'tol': 1e-5, 'iter': 5000, 'update_iter': 50, 
-        'record_iters': False, 'positivity': True, 'real': True})
+        'record_iters': True, 'positivity': True, 'real': True})
 
 
 #for i in range(len(x_true)):
@@ -77,7 +80,7 @@ def process(iterable):
     if noise <= 0:
         return np.zeros((256,256)), time.time() - st
     z, diag = solver.solve(y, m_op, noise)
-    return  z.real, time.time() - st
+    return  z.real, time.time() - st, diag
 
 start = 0
 
@@ -93,11 +96,12 @@ for i in range(start, len(x_true), 30):
     times = np.array(a[1]).reshape(-1)
     predict_x[i:i+len(prediction)] = prediction
     timings[i:i+len(times)] = times
+    diags[i:i+len(times)] = a[2]
 
     if mode == "train":
         np.save(project_folder + f"data/processed/{data}/PD_train_predict_{ISNR}dB.npy", predict_x)
         np.save(project_folder + f"data/processed/{data}/times_train_{ISNR}dB.npy", timings)
-        
+        pickle.dump(diags, open(project_folder + f"results/{data}/diag_{ISNR}dB.npy", "wb"))
     elif mode == "test":
         np.save(project_folder + f"data/processed/{data}/PD_test_predict_{ISNR}dB.npy", predict_x)
         np.save(project_folder + f"data/processed/{data}/times_test_{ISNR}dB.npy", timings)

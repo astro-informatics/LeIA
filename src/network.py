@@ -8,6 +8,10 @@ from tensorflow.python.framework.ops import disable_eager_execution
 disable_eager_execution()
 
 class Gradient(tf.keras.layers.Layer):
+    """
+    Gradient operator
+    TODO create docstring
+    """
     def __init__(self, m_op, shape_x, shape_y, depth, learned=False):
         self.m_op = m_op
         self.learned = learned
@@ -27,13 +31,15 @@ class Gradient(tf.keras.layers.Layer):
 
     def __call__(self, x, y):
         x = tf.cast(x, tf.complex64)
-        m = self.m_op.forward(x) 
+        m = self.m_op.dir_op(x) 
         res = m -  y
         if not self.learned:
-            grad = self.m_op.adjoint( res )
+            grad = self.m_op.adj_op( res )
         else:
             grad = self.m_op.learned_adj_op( res )
-        return tf.cast(grad, tf.float32)
+
+        grad = tf.cast(grad, tf.float32)
+        return grad
 
 class fft_op():
     def __init__(self,):
@@ -89,12 +95,16 @@ def conv_block(x, conv_layers, filters, kernel_size, activation, name):
         )(x)
     return x 
 
-def grad_block(x, measurements, grad_op, shape, name=""):
+def grad_block(x, measurements, x_dirty, grad_op, shape, name=""):
     with tf.name_scope(name + "_grad"):
         x_ = x[:,:,:,0] # select the first filter of x for gradient calculation
         gradi = grad_op(x_, measurements)
         gradi.set_shape(shape)
-        x = tf.keras.layers.Concatenate()([x, tf.expand_dims(gradi, axis=3)])
+        x = tf.keras.layers.Concatenate()([
+            x, 
+            tf.expand_dims(x_dirty, axis=3),
+            tf.expand_dims(gradi, axis=3)
+            ]) # add gradient and dirty image at this scale
     return x
 
 
@@ -152,15 +162,17 @@ class Unet(tf.keras.Model):
 
         # get initial reconstruction through (learned) adjoint NUFFT
         if not learned_adjoint:
-            x = tf.math.real(op.adjoint(inputs*w))
+            x = tf.math.real(op.adj_op(inputs*w))
         else:
             x = tf.math.real(op.learned_adj_op(inputs*w))
+        x_init = x
         x = tf.expand_dims(x, axis=3) # add empty dimension for CNNs
 
         if grad:
             # construct gradient operators
             gradient_ops = []
             subsampled_inputs = []
+            dirty_images = []
     
             for i in range(depth):
                 # m_op = TF_nufft() # numpy function tf operator
@@ -173,9 +185,10 @@ class Unet(tf.keras.Model):
                         m_op, [None, nd[0], nd[1]], [None, np.sum(sel)], i, learned=learned_grad
                     ) 
                 )
-                # TODO add learned option to grdient
-                subsampled_inputs.append(tf.boolean_mask(inputs, sel, axis=1))
-
+                subsampled_input = tf.boolean_mask(inputs, sel, axis=1)           
+                subsampled_inputs.append(subsampled_input)
+                dirty_image = tf.math.real(m_op.adj_op(subsampled_input))
+                dirty_images.append(dirty_image)
         #x = self.preprocess(inputs)
 
         # convolution downward
@@ -187,7 +200,8 @@ class Unet(tf.keras.Model):
                 # gradients
                 x = grad_block(
                     x, 
-                    measurements=subsampled_inputs[i], 
+                    measurements=subsampled_inputs[i],
+                    x_dirty=dirty_images[i],  
                     grad_op=gradient_ops[i],
                     shape=shape, 
                     name=f"Down_depth_{i}"
@@ -227,6 +241,7 @@ class Unet(tf.keras.Model):
                 x = grad_block(
                     x, 
                     measurements=subsampled_inputs[-(i+1)], 
+                    x_dirty=dirty_images[-(i+1)],  
                     grad_op=gradient_ops[-(i+1)],
                     shape=shape, 
                     name=f"Up_depth_{depth-i-1}"
@@ -253,9 +268,9 @@ class Unet(tf.keras.Model):
                         activation=output_activation,
                         name="conv2d_output"
                         )(x)
+            outputs = tf.squeeze(outputs) + x_init # remove extra dimension and add initial reconstruction
         else:
-            outputs = x
-        outputs = tf.squeeze(outputs) # remove extra dimension
+            outputs = tf.sqeeze(x)
         super().__init__(inputs=[inputs], outputs=outputs)
 
         self.compile(optimizer='adam', loss= tf.keras.losses.MSE)

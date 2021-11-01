@@ -55,10 +55,12 @@ class Dataset(tf.data.Dataset):
             files = np.loadtxt(os.environ["HOME"] + 
                             "/src_aiai/images.txt", dtype=str) # only a selection of the files are larger than (256,256)    
         elif data == "GZOO":
-            files = glob.glob("./data/galaxy_zoo_train/images_training_rev1/*.jpg")        
+            files = glob.glob(os.environ["HOME"] +"/src_aiai/data/galaxy_zoo_train/images_training_rev1/*.jpg")     
+        elif data == "SATS":
+            files = glob.glob(os.environ["HOME"] +"/src_aiai/data/sat/train/*.jpg")     
         else: 
             files = [] # this will not work but catches edge cases
-
+        print(f"using dataset {data} with {len(files)} files")
         return tf.data.Dataset.from_generator(
             cls._generator,
             output_types= tf.float32,

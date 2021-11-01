@@ -50,6 +50,46 @@ def calculate_kaiser_bessel_coef(k, i, Jd=(6,6)):
 
     return indices.T, values
 
+def calculate_kaiser_bessel_coef_1d(k, i, Jd=(6)):
+    """Calculate the Kaiser-Bessel kernel coefficients for a 1d grid for the neighbouring pixels. 
+
+    Args:
+        k (float,float): location of the point to be interpolated
+        i (int): extra index parameter
+        Jd (tuple, optional): Amount of neibhouring pixels to be used in each direction. Defaults to (6,6).
+
+    Returns:
+        indices (list): list of indices of all the calculated coefficients
+        values (list): list of the calculated coefficients
+    
+    TODO integrate this function with its 2d variant. 
+    """
+
+    k = k.reshape(-1,1)
+    J = Jd[0]//2
+    a = np.array(np.meshgrid(*[range(-J, J) for i in range(k.shape[0])])).reshape(k.shape[0], -1)
+    a += (k % 1 >0.5) # corrects to the closest 6 pixels
+    indices = (k.astype(int) + a)
+    J = Jd[0] # assuming same pixel sensitivity in all directions
+
+    beta = 2.34*J
+    norm = J 
+
+    # for 2d do the interpolation 2 times, once in each direction
+    u =  k - indices
+    values = 1
+    for j in range(k.shape[0]):
+        values *= iv(0, beta*np.sqrt(1 +0j - (2*u[j]/Jd[j])**2)).real / Jd[j]
+
+    indices = np.vstack((
+            np.zeros(indices.shape[1]), # empty axis
+            np.repeat(i, indices.shape[1]), # filter axis
+            indices, # )
+#             indices[1]) 
+    )).astype(int)
+
+    return indices.T, values
+
 
 class NUFFT_op():
     """NUFFT implementation using a Kaiser-Bessel kernel for interpolation. 
@@ -138,6 +178,95 @@ class NUFFT_op():
             (self.Kd[1]-self.Nd[1])//2: (self.Kd[1]-self.Nd[1])//2 +self.Nd[1]
             ] # remove zero padding from image
 
+class NUFFT_op_1D():
+    """NUFFT implementation using a Kaiser-Bessel kernel for interpolation. 
+
+    TODO integrate this function with its 2d variant
+    """
+    def __init__(self):
+        pass
+        # TODO generalise more, (pick axes, norm, etc.)
+        
+    def plan(self, uv, Nd, Kd, Jd, batch_size=None):
+        # saving some values
+        self.Nd = Nd
+        self.Kd = Kd
+        self.Jd = Jd
+        self.M = len(uv)
+        
+        if uv.ndim < 2:
+            uv = uv[:,np.newaxis]
+        
+        gridsize = 2*np.pi / Kd[0]
+        k = (uv + np.pi) / gridsize
+        
+        # calculating coefficients for interpolation
+        indices = []
+        values =  []
+        for i in tqdm.tqdm(range(len(uv))):
+            ind, vals = calculate_kaiser_bessel_coef_1d(k[i], i, Jd)
+            indices.append(ind)
+            values.append(vals.real)
+        
+        # building sparse matrix
+        indices = np.array(indices).reshape(-1, uv.shape[1] +2)
+        values = np.array(values).reshape(-1)
+        self.interp_matrix = sparse.COO(indices.T, values, shape=[1, len(uv)] + list(Kd) )
+
+        # calculating scaling based on iFT of the KB kernel
+        J = Jd[0] 
+        beta = 2.34*J
+        s_kb = lambda x: np.sinc(np.sqrt((np.pi *x *J)**2 - (2.34*J)**2 +0j)/np.pi)
+
+        # scaling done for both axes seperately
+        xx = (np.arange(Kd[0])/Kd[0] -.5)[Kd[0]//4:-Kd[0]//4]
+        sa = s_kb(xx).real
+        self.scaling = sa # (sa.reshape(-1,1) * sa.reshape(1,-1))
+    
+    def dir_op(self, xx):
+        return np.squeeze(self._kk2k(self._xx2kk(self._pad((xx/self.scaling).reshape(-1, self.Nd[0])))))  # why divide on both sides?
+
+    
+    def adj_op(self, k):
+        kk = self._k2kk(k)
+        xx = self._kk2xx(kk)
+        xx = self._unpad(xx)
+        xx = np.squeeze(xx) / self.scaling
+        return xx 
+        # return np.squeeze(self._unpad(self._kk2xx(self._k2kk(k)))) / self.scaling
+    
+    def _kk2k(self, kk):
+        """interpolates of the grid to non uniform measurements"""
+        return (self.interp_matrix * kk.reshape(-1, 1, self.Kd[0])).sum(axis=(2)).todense()
+    
+    def _k2kk(self, y):
+        """convolutes measurements to oversampled fft grid"""
+        return (self.interp_matrix * y.reshape(-1, self.M, 1)).sum(axis=1).todense()
+    
+    @staticmethod
+    def _kk2xx(kk):
+        """from 2d fourier space to 2d image space"""
+        return np.fft.ifftshift(np.fft.ifft(np.fft.ifftshift(kk, axes=(-1))), axes=(-1))
+
+    @staticmethod
+    def _xx2kk(xx):
+        """from 2d fourier space to 2d image space"""
+        return np.fft.fftshift(np.fft.fft(np.fft.fftshift(xx, axes=(-1))), axes=(-1))
+    
+    def _pad(self, x):
+        """pads x to go from Nd to Kd"""
+        return np.pad(x, (
+            ( 0,0 ),
+            ( (self.Kd[0]-self.Nd[0])//2, (self.Kd[0]-self.Nd[0])//2),
+            ))
+    
+    
+    def _unpad(self, x):
+        """unpads x to go from  Kd to Nd"""
+        return x[
+            :,
+            (self.Kd[0]-self.Nd[0])//2: (self.Kd[0]-self.Nd[0])//2 +self.Nd[0],
+            ] # remove zero padding from image
 
 
 class NUFFT_op_TF():

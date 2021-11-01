@@ -1,4 +1,5 @@
 
+from tensorflow.keras import callbacks
 from src.network import Unet
 import numpy as np
 import tensorflow as tf
@@ -8,7 +9,7 @@ import time
 import sys 
 
 from src.callbacks import PredictionTimeCallback, TimeOutCallback, CSV_logger_plus
-from src.dataset import *
+from src.dataset import * # TODO change this dirty import
 from src.sampling.uv_sampling import spider_sampling
 
 from util import gpu_setup
@@ -35,14 +36,15 @@ grad_on_upsample = bool(int(sys.argv[7]))
 # 30 dunet sigmoid 0 0 1 0
 # 30 dunet sigmoid 0 0 0 1
 
-# data = "COCO"
+data = "COCO"
 # data = "GZOO"
-data = "LLPS"
+# data = "LLPS"
+# data = "SATS"
 
 set_size = 2000
 
 train_time = 10*60 # time after which training should stop in mins
-i = 0
+i = "_smaller"
 # grad = False # 40x slower (27x)
 
 postfix = "_" + activation
@@ -53,6 +55,9 @@ if learned_grad:
     postfix += "_learned_grad"
 if grad_on_upsample:
     postfix += "_upsample_grad"
+
+if i:
+    postfix += str(i)
 
 project_folder = os.environ["HOME"] + "/src_aiai/"
 data_folder = project_folder + f"data/intermediate/{data}"
@@ -84,10 +89,7 @@ def load_data(data_folder, ISNR=30):
 
     return x_true, x_dirty, y_dirty, x_true_test, x_dirty_test, y_dirty_test
 
-try:
-    x_true, x_dirty, y_dirty, x_true_test, x_dirty_test, y_dirty_test = load_data(data_folder)
-except: 
-    pass
+
 
 
 def preprocess(x, m=None, s=None):
@@ -104,8 +106,8 @@ def unpreprocess(x, m, s):
 # x_true_dirty, m, s = preprocess(x_true_dirty)
 # x_test_dirty, *_ = preprocess(x_test_dirty)
 
-epochs = 200
-save_freq = 5
+epochs = 1000
+save_freq = 50
 batch_size = 20
 # set_size = 200 # TODO
 
@@ -116,10 +118,12 @@ if network == "adjoint":
     train_time = 4*60
     grad = False
 elif network == "unet":
-    depth = 4
+    # depth = 4
+    depth = 2
     grad = False
 elif network == "dunet":
-    depth = 4
+    # depth = 4
+    depth = 2
     grad = True
 else:
     print("not valid network option")
@@ -175,13 +179,19 @@ tb_callback = tf.keras.callbacks.TensorBoard(
 
 to_callback = TimeOutCallback(timeout=train_time, checkpoint_path=checkpoint_path)
 
+callbacks = [
+    cp_callback, 
+    csv_logger, 
+    # to_callback,
+]
+
 # early_stopping = tf.keras.callbacks.EarlyStopping(patience=100, restore_best_weights=True)
 
 print("creating dataset")
 tf_func, func = measurement_func(ISNR=ISNR)
-ds = Dataset(set_size)
+ds = Dataset(set_size, data)
 yogadl_dataset = make_yogadl_dataset(ds) # use yogadl for caching and shuffling the data
-if data == "COCO":
+if data in ["COCO", "SATS"]:
     dataset = ds.take(200).map(random_crop).map(tf_func).batch(batch_size).map(data_map).prefetch(tf.data.experimental.AUTOTUNE)
 elif data == "GZOO":
     dataset = ds.take(200).map(center_crop).map(tf_func).batch(batch_size).map(data_map).prefetch(tf.data.experimental.AUTOTUNE)
@@ -199,7 +209,7 @@ if network != 'adjoint' or learned_adjoint:
     history = model.fit(
         dataset, 
         epochs=epochs, 
-        callbacks=[cp_callback, csv_logger, to_callback]
+        callbacks=callbacks
 )
 
 # history = model.fit(x=[x_dirty, y_dirty], 
@@ -210,7 +220,13 @@ if network != 'adjoint' or learned_adjoint:
 #                     callbacks=[cp_callback, csv_logger, early_stopping])
 
 
-pt_callback = PredictionTimeCallback(project_folder + f"/results/{data}/summary.csv", batch_size) 
+pt_callback = PredictionTimeCallback(project_folder + f"/results/{data}/summary_{network}{postfix}.csv", batch_size) 
+
+try:
+    x_true, x_dirty, y_dirty, x_true_test, x_dirty_test, y_dirty_test = load_data(data_folder)
+except: 
+    pass
+
 
 print("predict train")
 train_predict = model.predict(y_dirty, batch_size=batch_size, callbacks=[pt_callback])
@@ -223,4 +239,13 @@ np.save(project_folder + f"data/processed/{data}/test_predict_{network}_{ISNR}dB
 pickle.dump(history.history, open(project_folder + f"results/{data}/history_{network}_{ISNR}dB" + postfix + ".pkl", "wb"))
 
 
+y_dirty_test_robust = np.load(project_folder + "/data/intermediate/y_dirty_test_robustness.npy")
+print("predict")
+test_predict_robust = model.predict(y_dirty_test_robust, batch_size=20)
+np.save(project_folder + f"data/processed/{data}/test_predict_{network}_robustness" + postfix + ".npy", test_predict_robust)
+
+y_dirty_gen = np.load(project_folder + "/data/intermediate/y_dirty_gen_30dB.npy")
+print("predict")
+test_predict_gen = model.predict(y_dirty_gen, batch_size=20)
+np.save(project_folder + f"data/processed/{data}/test_predict_{network}_gen" + postfix + ".npy", test_predict_gen)
 # print("it took:",  (time.time()-st)/60, "mins")

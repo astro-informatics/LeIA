@@ -21,14 +21,16 @@ learned_adjoint = bool(int(sys.argv[5]))
 learned_grad = bool(int(sys.argv[6]))
 grad_on_upsample = bool(int(sys.argv[7]))
 
-i = 0
-data = "COCO"
-data = "GZOO"
-# data = "LLPS"
+# i = "_same"
+i = ""
+# data = "COCO"
+# data = "GZOO"
+data = "LLPS"
+# data = "SATS"
 
 
 
-postfix = "_" + activation
+postfix = "_" + activation 
 
 if learned_adjoint:
     postfix += "_learned_adjoint"
@@ -37,6 +39,8 @@ if learned_grad:
 if grad_on_upsample:
     postfix += "_upsample_grad"
 
+if i:
+    postfix += str(i)    
 
 project_folder = os.environ["HOME"] + "/src_aiai/"
 data_folder = project_folder + f"data/intermediate/{data}"
@@ -114,22 +118,29 @@ if network != "adjoint" or learned_adjoint:
 
 
 batch_size = 20
-pt_callback = PredictionTimeCallback(project_folder + f"/results/{data}/summary.csv", batch_size) 
+# pt_callback = PredictionTimeCallback(project_folder + f"/results/{data}/summary_{network}{postfix}.csv", batch_size) 
     
-print("predict train")
-train_predict = model.predict(y_dirty, batch_size=batch_size, callbacks=[pt_callback])
-print("predict test")
-test_predict = model.predict(y_dirty_test, batch_size=batch_size)
+# print("predict train")
+# train_predict = model.predict(y_dirty, batch_size=batch_size, callbacks=[pt_callback])
+# print("predict test")
+# test_predict = model.predict(y_dirty_test, batch_size=batch_size)
+
+
+# print("saving")
+# np.save(project_folder + f"data/processed/{data}/train_predict_{network}_{ISNR}dB" + postfix + ".npy", train_predict)
+# np.save(project_folder + f"data/processed/{data}/test_predict_{network}_{ISNR}dB" + postfix + ".npy", test_predict)
+# #pickle.dump(history.history, open(project_folder + f"results/{data}/history_{network}_{ISNR}dB" + postfix + ".pkl", "wb"))
+
+
 
 # y_dirty_test_robust = np.load(project_folder + "/data/intermediate/y_dirty_test_robustness.npy")
 # print("predict")
 # test_predict_robust = model.predict(y_dirty_test_robust, batch_size=20)
 # np.save(project_folder + f"data/processed/{data}/test_predict_{network}_robustness" + postfix + ".npy", test_predict_robust)
 
-print("saving")
-np.save(project_folder + f"data/processed/{data}/train_predict_{network}_{ISNR}dB" + postfix + ".npy", train_predict)
-np.save(project_folder + f"data/processed/{data}/test_predict_{network}_{ISNR}dB" + postfix + ".npy", test_predict)
-#pickle.dump(history.history, open(project_folder + f"results/{data}/history_{network}_{ISNR}dB" + postfix + ".pkl", "wb"))
-
+y_dirty_gen = np.load(project_folder + "/data/intermediate/y_dirty_gen_30dB.npy")
+print("predict")
+test_predict_gen = model.predict(y_dirty_gen, batch_size=20)
+np.save(project_folder + f"data/processed/{data}/test_predict_{network}_gen" + postfix + ".npy", test_predict_gen)
 
 # print("it took:",  (time.time()-st)/60, "mins")
