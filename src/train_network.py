@@ -1,4 +1,5 @@
 
+from functools import partial
 from tensorflow.keras import callbacks
 from src.network import Unet
 import numpy as np
@@ -24,6 +25,7 @@ load_weights = bool(int(sys.argv[4]))
 learned_adjoint = bool(int(sys.argv[5]))
 learned_grad = bool(int(sys.argv[6]))
 grad_on_upsample = bool(int(sys.argv[7]))
+data = sys.argv[8]
 
 # 30 adjoint sigmoid 0 0 0 0
 # 30 adjoint sigmoid 0 1 0 0
@@ -36,7 +38,7 @@ grad_on_upsample = bool(int(sys.argv[7]))
 # 30 dunet sigmoid 0 0 1 0
 # 30 dunet sigmoid 0 0 0 1
 
-data = "COCO"
+# data = "COCO"
 # data = "GZOO"
 # data = "LLPS"
 # data = "SATS"
@@ -44,7 +46,7 @@ data = "COCO"
 set_size = 2000
 
 train_time = 10*60 # time after which training should stop in mins
-i = "_smaller"
+i = "_same2"
 # grad = False # 40x slower (27x)
 
 postfix = "_" + activation
@@ -82,7 +84,7 @@ def load_data(data_folder, ISNR=30):
     print("Loading test data")
     x_true_test = np.load( data_folder+ f"/x_true_test_{ISNR}dB.npy").reshape(-1,256,256)
     x_dirty_test = np.load( data_folder+ f"/x_dirty_test_{ISNR}dB.npy")
-    y_dirty_test = np.load(project_folder + f"./data/intermediate/{data}/y_dirty_train_{ISNR}dB.npy").reshape( -1,4440)
+    y_dirty_test = np.load(project_folder + f"./data/intermediate/{data}/y_dirty_test_{ISNR}dB.npy").reshape( -1,4440)
     
     # print("Creating fft grid test")
     # y_dirty_test = fft(x_dirty_test)
@@ -109,28 +111,32 @@ def unpreprocess(x, m, s):
 epochs = 1000
 save_freq = 50
 batch_size = 20
-# set_size = 200 # TODO
 
-uv = spider_sampling()
+n_spokes = 37 
+# n_spokes = 85 # Changed the ammount of spokes, is different from the prebuilt datasets
+uv = spider_sampling(n_spokes=n_spokes)
+input_size = (256,256,1)
+# input_size = (128,128,1)
+
 
 if network == "adjoint":
     depth = 0
     train_time = 4*60
     grad = False
 elif network == "unet":
-    # depth = 4
-    depth = 2
+    depth = 4
+    # depth = 2
     grad = False
 elif network == "dunet":
-    # depth = 4
-    depth = 2
+    depth = 4
+    # depth = 2
     grad = True
 else:
     print("not valid network option")
     exit()
 
 model = Unet(
-    (256,256,1), 
+    input_size,
     uv=uv, 
     depth=depth, 
     start_filters=16, 
@@ -188,8 +194,9 @@ callbacks = [
 # early_stopping = tf.keras.callbacks.EarlyStopping(patience=100, restore_best_weights=True)
 
 print("creating dataset")
-tf_func, func = measurement_func(ISNR=ISNR)
+tf_func, func = measurement_func(uv, Nd=input_size[:2], ISNR=ISNR)
 ds = Dataset(set_size, data)
+data_map = partial(data_map, y_size=len(uv), z_size=input_size[:2])
 yogadl_dataset = make_yogadl_dataset(ds) # use yogadl for caching and shuffling the data
 if data in ["COCO", "SATS"]:
     dataset = ds.take(200).map(random_crop).map(tf_func).batch(batch_size).map(data_map).prefetch(tf.data.experimental.AUTOTUNE)

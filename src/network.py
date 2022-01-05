@@ -86,16 +86,17 @@ def conv_block(x, conv_layers, filters, kernel_size, activation, name):
         x = tf.keras.layers.Conv2D(
             filters=filters, 
             kernel_size=kernel_size, 
-            activation=activation, 
+            # activation=activation, 
             padding='same',
             name=name + "_conv2d_" + str(j)
         )(x)
         x = tf.keras.layers.BatchNormalization(
             name=name + "_batchnorm_" + str(j)
         )(x)
+        x = tf.keras.layers.ReLU()(x)
     return x 
 
-def grad_block(x, measurements, x_dirty, grad_op, shape, name=""):
+def grad_block(x, measurements, grad_op, shape, x_dirty=None, name=""):
     with tf.name_scope(name + "_grad"):
         x_ = x[:,:,:,0] # select the first filter of x for gradient calculation
         gradi = grad_op(x_, measurements)
@@ -174,12 +175,13 @@ class Unet(tf.keras.Model):
             subsampled_inputs = []
             dirty_images = []
     
-            for i in range(depth):
+            for i in range(depth+1):
                 # m_op = TF_nufft() # numpy function tf operator
                 m_op = NUFFT_op_TF() # TF native operator
                 nd, kd = (Nd[0]//2**i, Nd[1]//2**i), (Kd[0]//2**i, Kd[1]//2**i)
-                sel = np.linalg.norm(uv, axis=1) < np.pi / 2**i
-                m_op.plan(uv[sel], nd, kd, Jd, batch_size)
+                # sel = np.linalg.norm(uv, axis=1) < np.pi / 2**i # radial selection
+                sel =  np.all(uv < 0.9 * np.pi / 2**i, axis=1) # square selection (with exclusion region outside)
+                m_op.plan(uv[sel]*2**i, nd, kd, Jd, batch_size) # correct uv so they fill full plane of sub-sample
                 gradient_ops.append( 
                     Gradient(
                         m_op, [None, nd[0], nd[1]], [None, np.sum(sel)], i, learned=learned_grad
@@ -187,6 +189,7 @@ class Unet(tf.keras.Model):
                 )
                 subsampled_input = tf.boolean_mask(inputs, sel, axis=1)           
                 subsampled_inputs.append(subsampled_input)
+
                 dirty_image = tf.math.real(m_op.adj_op(subsampled_input))
                 dirty_images.append(dirty_image)
         #x = self.preprocess(inputs)
@@ -221,6 +224,18 @@ class Unet(tf.keras.Model):
 
         if depth != 0:
             # smallest layer
+            i += 1
+            shape = (None, Nd[0]//2**i, Nd[1]//2**i)            
+            if grad:
+                # gradients
+                x = grad_block(
+                    x, 
+                    measurements=subsampled_inputs[i],
+                    x_dirty=dirty_images[i],  
+                    grad_op=gradient_ops[i],
+                    shape=shape, 
+                    name=f"Down_depth_{i}"
+                )
             x = conv_block(
                     x, 
                     conv_layers = conv_layers, 
@@ -234,14 +249,22 @@ class Unet(tf.keras.Model):
         for i in range(depth):
             shape = (None, Nd[0]//2**(depth-i-1), Nd[1]//2**(depth-i-1))
 
-            x = tf.keras.layers.UpSampling2D()(x)
+            # x = tf.keras.layers.UpSampling2D()(x)
+            x = tf.keras.layers.Conv2DTranspose(
+                filters=start_filters*2**(depth-(i+1)), 
+                kernel_size=(3,3),
+                strides=(2,2),
+                padding='same'
+            )(x)
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = tf.keras.layers.ReLU()(x)
 
             if grad and grad_on_upsample:
                 # gradients
                 x = grad_block(
                     x, 
                     measurements=subsampled_inputs[-(i+1)], 
-                    x_dirty=dirty_images[-(i+1)],  
+                    # x_dirty=dirty_images[-(i+1)],  
                     grad_op=gradient_ops[-(i+1)],
                     shape=shape, 
                     name=f"Up_depth_{depth-i-1}"
@@ -270,7 +293,7 @@ class Unet(tf.keras.Model):
                         )(x)
             outputs = tf.squeeze(outputs) + x_init # remove extra dimension and add initial reconstruction
         else:
-            outputs = tf.sqeeze(x)
+            outputs = tf.squeeze(x)
         super().__init__(inputs=[inputs], outputs=outputs)
 
         self.compile(optimizer='adam', loss= tf.keras.losses.MSE)

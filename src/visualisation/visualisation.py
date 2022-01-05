@@ -54,7 +54,7 @@ def compare(images, ncols=None, nrows=None, titles=None, same_scale=False, color
             ax[i,j].set_xticks([])
             ax[i,j].set_yticks([])
             
-    plt.show()
+#     plt.show()
 
 def visualise_benchmark(results):
     print(f"Solved using {results['name']}")
@@ -67,25 +67,44 @@ def visualise_benchmark(results):
         ], titles=["x_true", "solution", f"difference (RSE: {results['RSE']:.3e})"])
 
 
-def print_statistics(statistics, results, metrics):
-    print(f"|{'Name':40}|", end="")
+def print_statistics(statistics, results, metrics, latex=False):
+    if latex:
+        separator = " & "
+        lines = ""
+    else:
+        separator = "|"
+        lines = "|"
+    
+
+    print( f"{'Name':40}", end=separator)
     for metric, f in metrics:
-        print(f"{metric:20}|", end="")
+        print(f"{metric:20}", end=separator)
+    if latex:
+        print("\\\\", end="")
     print()
     for name, set, _ in sorted(results):
         if name in statistics.Method.values:
-            print(f"|{name+'_'+set:40}|", end="")
+            print(f"{name+'_'+set:40}", end=separator)
             for metric, f in metrics:
-                print(f"{np.mean(statistics[metric][(statistics.Method == name) * (statistics.Set == set)]):8.3f} \pm {np.std(statistics[metric][(statistics.Method == name) * (statistics.Set == set)]):7.3f}|", end="")
+                if latex:
+                    print(f"$ {np.mean(statistics[metric][(statistics.Method == name) * (statistics.Set == set)]):8.3f} \pm {np.std(statistics[metric][(statistics.Method == name) * (statistics.Set == set)]):7.3f} $", end=separator)
+                else:
+                    print(f"{np.mean(statistics[metric][(statistics.Method == name) * (statistics.Set == set)]):8.3f} \pm {np.std(statistics[metric][(statistics.Method == name) * (statistics.Set == set)]):7.3f}", end=separator)
+                
+                # median = np.median(statistics[metric][(statistics.Method == name) * (statistics.Set == set)])
+                # smad = 1.4826* np.median(np.abs(statistics[metric][(statistics.Method == name) * (statistics.Set == set)] - median))
+                # print(f"{median:8.3f} \pm {smad:7.3f}|", end="")
+            if latex:
+                print("\\\\", end="")
             print()
 
-def plot_statistics(statistics, metrics, ylims=[[0,40], [0,1], [0, 0.04]], split=True):
+def plot_statistics(statistics, metrics, ylims=[[0,40], [0,1], [0, 0.04]], split=True, order=None):
     #TODO add some better ytick labels, currently to many/much precision
     fig, ax = plt.subplots(ncols=len(metrics), figsize=(len(metrics)*8, 6))
     for idx, (metric, _) in enumerate(metrics):
         plt.sca(ax[idx])
         sns.set_style('whitegrid')
-        sns.violinplot(data=statistics, x='Method', y=metric, split=split, hue='Set', palette="Set3", bw=.2, cut=1, linewidth=1, inner='quart', orientation='v')
+        sns.violinplot(data=statistics, x='Method', y=metric, split=split, hue='Set', palette="Set3", bw=.2, cut=1, linewidth=1, inner='quart', orientation='v', order=order)
         # sns.violinplot(data=statistics, x='Method', y=metric, split=False, hue='Set', palette="Set3", bw=.2, cut=1, linewidth=1, inner='quart', orientation='v')
         plt.ylabel(metric, fontsize='x-large')
         plt.xlabel("")

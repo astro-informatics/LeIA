@@ -130,7 +130,7 @@ def make_yogadl_dataset(tf_dataset, storage_path="/tmp/yogadl_cache", shuffle=Tr
 
 def random_crop(x):
 #     x = tf.cast(x, tf.float32)/255
-    data = tf.image.random_crop(x, size=(256,256,1))
+    data = tf.image.random_crop(x, size=(256,256,1)) #TODO adapt this to be adaptable
     data = tf.image.random_flip_left_right(data)
     data = tf.image.random_flip_up_down(data)
     return data
@@ -144,8 +144,8 @@ def center_crop(x):
     return data
 
 
-def measurement(x, m_op, ISNR, data_shape, w):
-    y0 = m_op.dir_op(x.reshape(256,256))
+def measurement(x, m_op, ISNR, data_shape, w, Nd=(256,256)):
+    y0 = m_op.dir_op(x.reshape(Nd))
 
     sigma = np.sqrt(np.mean(np.abs(y0)**2)) * 10**(-ISNR/20)
     n = np.random.normal( 0, sigma, data_shape) + 1j * np.random.normal( 0, sigma, data_shape)
@@ -159,7 +159,7 @@ def measurement(x, m_op, ISNR, data_shape, w):
 #     return ((x_dirty.reshape(256,256,1), y.reshape(4440,1)), x.reshape(256,256,1))
 #     print(x_dirty.shape, y_dirty.shape)
 #     return (x_dirty.reshape(256,256,1).astype(np.float32), y_dirty.reshape(4440,1).astype(np.complex128), x.reshape(256,256,1).astype(np.float32))
-    return y_dirty.reshape(4440).astype(np.complex64), x.reshape(256,256).astype(np.float32)
+    return y_dirty.reshape(-1).astype(np.complex64), x.reshape(Nd).astype(np.float32)
 
 #     return (x_dirty, y_dirty, x)
 
@@ -168,11 +168,12 @@ def measurement(x, m_op, ISNR, data_shape, w):
 #     return tf.numpy_function(mapping_function, [x], (tf.float32, tf.float32))
 #     # return tf.py_function(mapping_function, [x], (tf.float32, tf.float32))
 
-def measurement_func(ISNR=30, data_shape=(4440,)):
+def measurement_func(uv, Nd=(256,256), ISNR=30):
+    data_shape = (len(uv),)
     """function for getting a tf function version of the measurment function"""
-    uv = spider_sampling()
+    # uv = spider_sampling()
     m_op = NUFFT_op()
-    m_op.plan(uv, (256,256), (512,512), (6,6))
+    m_op.plan(uv, (Nd[0], Nd[1]), (Nd[0]*2, Nd[1]*2), (6,6))
 
     grid_cell = 2*np.pi /512 
     binned = (uv[:,:]+np.pi+.5*grid_cell) // grid_cell
@@ -187,7 +188,7 @@ def measurement_func(ISNR=30, data_shape=(4440,)):
     w = 1/w_gridded
     w /= w.max()
 
-    func = partial(measurement, m_op=m_op, ISNR=ISNR, data_shape=data_shape, w=w)
+    func = partial(measurement, m_op=m_op, ISNR=ISNR, data_shape=data_shape, w=w, Nd=Nd)
 
     @tf.function(input_signature=[tf.TensorSpec(None, tf.float32)])
     def tf_function(x):
@@ -198,15 +199,15 @@ def measurement_func(ISNR=30, data_shape=(4440,)):
     return tf_function, func
 
 @tf.function()
-def data_map(y,z):
+def data_map(y,z, y_size=4440, z_size=(256,256)):
     """split input and output of train data"""
 #     return {"input_1":x, "input_3":y}, z
 #     x = tf.expand_dims(x, 3)
 #     x.set_shape([None,256,256,1])
 #     y = tf.expand_dims(y, 3)
-    y.set_shape([None,4440])
+    y.set_shape([None,y_size])
 #     z = tf.expand_dims(z, 3)
-    z.set_shape([None,256,256])
+    z.set_shape([None,z_size[0],z_size[1]])
 #     return (x, y), z
     return y, z
 

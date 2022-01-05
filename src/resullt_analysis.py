@@ -28,20 +28,30 @@ x_true_test = np.squeeze(np.load(f"./data/intermediate/{data}/x_true_test_{ISNR}
 print("define datasets")
 name_net_post = [
     ("Adjoint", "adjoint", "_sigmoid"),
-    ("Learned Adjoint", "adjoint", "_sigmoid_learned_adjoint"),
+#     ("Learned Adjoint", "adjoint", "_sigmoid_learned_adjoint"),
 
-    ("U-net", "unet", "_sigmoid"),
-    ("U-net learned adjoint", "unet", "_sigmoid_learned_adjoint"),
+    # ("U-net", "unet", "_sigmoid"),
+#     ("U-net learned adjoint", "unet", "_sigmoid_learned_adjoint"),
     
-    ("dU-net", "dunet", "_sigmoid"),
-    ("dU-net learned adjoint", "dunet", "_sigmoid_learned_adjoint"),
-    ("dU-net learned grad", "dunet", "_sigmoid_learned_grad"),
-    ("dU-net grad upsample", "dunet", "_sigmoid_upsample_grad"),
-    ("U-net long", "unet", "_sigmoid_long"),
-    ("dU-net dirty", "dunet", "_sigmoid_upsample_grad_dirty"),
+    # ("dU-net", "dunet", "_sigmoid"),
+#     ("dU-net learned adjoint", "dunet", "_sigmoid_learned_adjoint"),
+#     ("dU-net learned grad", "dunet", "_sigmoid_learned_grad"),
+#     ("dU-net grad upsample", "dunet", "_sigmoid_upsample_grad"),
+#     ("U-net long", "unet", "_sigmoid_long"),
+#     ("dU-net dirty", "dunet", "_sigmoid_upsample_grad_dirty"),
     
-    ("U-net same", "unet", "_sigmoid_same"),
-    ("dU-net same", "dunet", "_sigmoid_same"),
+    ("U-net", "unet", "_sigmoid_same"),
+    ("GU-net", "dunet", "_sigmoid_same"),
+    ("GU-net sigmoid 2", "dunet", "_sigmoid_same2"),
+    ("GU-net linear 2", "dunet", "_linear_same2"),
+#     ("U-net small", "unet", "_sigmoid_small"),
+#     ("dU-net small", "dunet", "_sigmoid_small"),
+#     ("U-net smaller", "unet", "_sigmoid_smaller"),
+#     ("dU-net smaller", "dunet", "_sigmoid_smaller"),
+    # ("Adjoint", "adjoint", "_sigmoid"),
+# 
+    # ("U-net", "unet", "_linear_report"),
+    # ("GU-net", "dunet", "_linear_report"),
 ]
 
 

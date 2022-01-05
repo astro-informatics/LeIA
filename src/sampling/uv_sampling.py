@@ -12,10 +12,11 @@ def radial_sampling(n_spokes=37, n_bins=10):
     return vis/np.max(vis) * np.pi /2
 
 
-def spider_sampling(n_spokes=37, n_lenslets=24, n_wavelengths=10):
+def spider_sampling(n_spokes=37, n_lenslets=24, n_wavelengths=10, normalised=True):
     angles = np.linspace(0, 2*np.pi, n_spokes, endpoint=False)
     wavelengths = np.linspace(500e-9, 900e-9, n_wavelengths) 
     baselines = np.arange(1, n_lenslets, 2) # scaling doesn't matter, relative length of baseline
+#     baselines = np.linspace(0.5, 0, n_lenslets//2, endpoint=False)[::-1] # scaling doesn't matter, relative length of baseline
 
     uv = list()
     for angle in angles: 
@@ -26,5 +27,6 @@ def spider_sampling(n_spokes=37, n_lenslets=24, n_wavelengths=10):
     
     # normalise to -pi/2, pi/2
     uv = np.array(uv)
-    uv = uv / np.max( np.abs(uv)) * np.pi /2
+    if normalised:
+        uv = uv / np.max( np.abs(uv)) * np.pi /2
     return uv

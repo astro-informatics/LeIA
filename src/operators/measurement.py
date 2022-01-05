@@ -119,6 +119,16 @@ class NUFFT_op():
         # building sparse matrix
         indices = np.array(indices).reshape(-1, 4)
         values = np.array(values).reshape(-1)
+        
+        #check if indices are within bounds, otherwise suppress them and raise warning
+        # TODO check in both dimensions instead of assuming square
+        if np.any(indices[:,2:] < 0) or np.any(indices[:,2:] >= Kd[0]):
+            sel_out_bounds = (np.any(indices[:,2:] < 0, axis=1) | np.any(indices[:,2:] >= Kd[0], axis=1))
+            print(f"some values lie out of the interpolation array, these are not used, check baselines")
+            indices = indices[~sel_out_bounds]
+            values = values[~sel_out_bounds]
+            
+        
         self.interp_matrix = sparse.COO(indices.T, values, shape=(1, len(uv), Kd[0], Kd[1]))
     
         # calculating scaling based on iFT of the KB kernel
@@ -299,6 +309,15 @@ class NUFFT_op_TF():
         # repeating the values and indices to match the batch_size (con of sparse tensors)
         values = np.array(values).reshape(-1)
         indices = np.array(indices).reshape(-1, 4)
+        
+        #check if indices are within bounds, otherwise suppress them and raise warning
+        if np.any(indices[:,2:] < 0) or np.any(indices[:,2:] >= Kd[0]):
+            sel_out_bounds = (np.any(indices[:,2:] < 0, axis=1) | np.any(indices[:,2:] >= Kd[0], axis=1))
+            print(f"some values lie out of the interpolation array, these are not used, check baselines")
+            indices = indices[~sel_out_bounds]
+            values = values[~sel_out_bounds]
+        
+        
         batch_indices = np.tile(indices[:,1:], [batch_size, 1])
         batch_indicators = np.repeat(np.arange(batch_size), (len(values)))
         batch_indices = np.hstack((batch_indicators[:,None], batch_indices))
