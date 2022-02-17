@@ -38,7 +38,7 @@ class NNFFT2D():
 
     @staticmethod
     def _ifft(Fx):
-        return np.real(np.fft.fftshift(np.fft.ifft2(np.fft.fftshift(Fx), norm='ortho')))
+        return np.fft.fftshift(np.fft.ifft2(np.fft.fftshift(Fx), norm='ortho'))
 
     def self_adj(self, x):
         y = self.dir_op(x)

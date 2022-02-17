@@ -52,7 +52,7 @@ class NUFFT2D():
 
         # scaling done for both axes seperately
         xx = (np.arange(Kd[0])/Kd[0] -.5)[Kd[0]//4:-Kd[0]//4]
-        sa = s_kb(xx).real
+        sa = s_kb(xx)
         self.scaling = (sa.reshape(-1,1) * sa.reshape(1,-1))
 
     def dir_op(self, xx):
