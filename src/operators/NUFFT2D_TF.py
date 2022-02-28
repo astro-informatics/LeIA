@@ -40,23 +40,22 @@ class NUFFT2D_TF():
         values = np.array(values).reshape(-1)
         indices = np.array(indices).reshape(-1, 4)
         
-        #check if indices are within bounds, otherwise suppress them and raise warning
-        if np.any(indices[:,2:] < 0) or np.any(indices[:,2:] >= Kd[0]):
-            sel_out_bounds = (np.any(indices[:,2:] < 0, axis=1) | np.any(indices[:,2:] >= Kd[0], axis=1))
-            print(f"some values lie out of the interpolation array, these are not used, check baselines")
-            indices = indices[~sel_out_bounds]
-            values = values[~sel_out_bounds]
+        # #check if indices are within bounds, otherwise suppress them and raise warning
+        # if np.any(indices[:,-2:] < 0) or np.any(indices[:,-2:] >= Kd[0]):
+        #     sel_out_bounds = (np.any(indices[:,-2:] < 0, axis=1) | np.any(indices[:,-2:] >= Kd[0], axis=1))
+        #     print(f"some values lie out of the interpolation array, these are not used, check baselines")
+        #     indices = indices[~sel_out_bounds]
+        #     values = values[~sel_out_bounds]
         
-        
-        batch_indices = np.tile(indices[:,1:], [batch_size, 1])
+        batch_indices = np.tile(indices[:,-2:], [batch_size, 1])
         batch_indicators = np.repeat(np.arange(batch_size), (len(values)))
-        batch_indices = np.hstack((batch_indicators[:,None], batch_indices))
+        self.batch_indices = np.hstack((batch_indicators[:,None], batch_indices))
 
         values = np.array(values).reshape(-1)
-        batch_values = np.tile(values, batch_size).astype(np.float32)
+        self.batch_values = np.tile(values, [batch_size,1]).astype(np.float32).reshape(self.batch_size, self.n_measurements, self.Jd[0]*self.Jd[1])
 
         # build sparse matrix
-        self.interp_matrix = tf.sparse.SparseTensor(batch_indices, batch_values, [batch_size, len(uv), Kd[0], Kd[1]])
+#         self.interp_matrix = tf.sparse.SparseTensor(batch_indices, batch_values, [batch_size, len(uv), Kd[0], Kd[1]])
         # self.interp_matrix = tf.sparse.reorder(self.interp_matrix)
 
         # determin scaling based on iFT of the KB kernel
@@ -67,6 +66,7 @@ class NUFFT2D_TF():
         xx = (np.arange(Kd[0])/Kd[0] -.5)[Kd[0]//4:-Kd[0]//4]
         sa = s_kb(xx).real
         self.scaling = (sa.reshape(-1,1) * sa.reshape(1,-1)).reshape(1, Nd[0], Nd[0])
+        self.scaling = tf.convert_to_tensor(self.scaling, dtype=tf.complex64)
         self.forward = self.dir_op
         self.adjoint = self.adj_op
 
@@ -80,8 +80,11 @@ class NUFFT2D_TF():
         
         kk = self._xx2kk(xx) / self.Kd[0]
         
-        kk = kk[:, None, :, :] # adding axes for sparse multiplication; shape [batch_size, 1, K, K]
+#         kk = kk[:, None, :, :] # adding axes for sparse multiplication; shape [batch_size, 1, K, K]
         # split real and imaginary parts because complex operations not defined for sparseTensors
+        k = self._kk2k(kk)
+        return k
+    
         k_real = tf.cast(self._kk2k(tf.math.real(kk)), tf.complex64)
         k_imag = tf.cast(self._kk2k(tf.math.imag(kk)), tf.complex64)
         return k_real + 1j * k_imag
@@ -91,12 +94,13 @@ class NUFFT2D_TF():
         # split real and imaginary parts because complex operations not defined for sparseTensors
         if measurement_weighting:
             k = k * self.measurement_weights # weighting measurements
-        k = k[:,:, None, None] # adding axes for sparse multiplication; shape [batch_size, M, 1, 1]
-        k_real = tf.math.real(k)
-        k_imag = tf.math.imag(k)
-        kk_real = tf.cast(self._k2kk(k_real), tf.complex64)
-        kk_imag = tf.cast(self._k2kk(k_imag), tf.complex64)
-        kk = kk_real + 1j* kk_imag
+        kk = self._k2kk(k)
+#         k = k[:,:, None, None] # adding axes for sparse multiplication; shape [batch_size, M, 1, 1]
+#         k_real = tf.math.real(k)
+#         k_imag = tf.math.imag(k)
+#         kk_real = tf.cast(self._k2kk(k_real), tf.complex64)
+#         kk_imag = tf.cast(self._k2kk(k_imag), tf.complex64)
+#         kk = kk_real + 1j* kk_imag
         xx = self._kk2xx(kk) * self.Kd[0]
         xx = self._unpad(xx)
         xx = xx / self.scaling
@@ -133,11 +137,19 @@ class NUFFT2D_TF():
     
     def _kk2k(self, kk):
         """interpolates of the grid to non uniform measurements"""
-        return tf.sparse.reduce_sum(self.interp_matrix * kk, axis=(2,3))
-            
+        v = tf.gather_nd(kk, self.batch_indices)
+        r = tf.reshape(v, (self.batch_size, self.n_measurements, self.Jd[0]*self.Jd[1])) * self.batch_values
+        return tf.reduce_sum(r, axis=2)
+        
     def _k2kk(self, k):
         """convolutes measurements to oversampled fft grid"""
-        return tf.sparse.reduce_sum(self.interp_matrix * k, axis=1 )
+#         print(self.batch_values.shape, k.shape)
+#         k = tf.reshape(k, [-1])
+        interp = k[:,:,None] * self.batch_values
+        interp = tf.reshape(interp, [-1])
+        f = tf.scatter_nd(self.batch_indices, interp, [self.batch_size] + list(self.Kd))
+        return f
+        
     
     @staticmethod
     def _kk2xx(kk):

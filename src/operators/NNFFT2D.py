@@ -4,8 +4,7 @@ import numpy as np
 
 class NNFFT2D():
     """Nearest Neighbour FFT. This operator maps the u,v coordinates to the nearest gridpoint and does an FFT. """
-    def plan(self, uv, Nd=(256,256), Kd=(512,512), Jd=None):
-    
+    def plan(self, uv, Nd, Kd, Jd, batch_size=None):    
         # saving some values
         self.Nd = Nd
         self.Kd = Kd

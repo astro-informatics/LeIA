@@ -12,7 +12,7 @@ class NNFFT2D_TF():
         # saving some values
         self.Nd = Nd
         self.Kd = Kd
-        self.Jd = Jd
+        self.Jd = (1,1)
         self.M = len(uv)
         self.measurement_weights = measurement_weights
         self.normalization_factor = 1
@@ -25,44 +25,46 @@ class NNFFT2D_TF():
         indices = []
         values =  []
         for i in tqdm.tqdm(range(len(uv))):
-            ind, vals = (0, i, int(k[i,0]+.5), int(k[i,1] + 0.5)), 1
-            indices.append(ind)
-            values.append(vals.real)
+            ind, vals = [(int(k[i,0]+.5), int(k[i,1] + 0.5))], [1]
+            indices += ind
+            values += vals
         
         # repeating the values and indices to match the batch_size (con of sparse tensors)
-        values = np.array(values).reshape(-1)
-        indices = np.array(indices).reshape(-1, 4)
+        values = np.array(values)
+        indices = np.array(indices)
         
-        #check if indices are within bounds, otherwise suppress them and raise warning
-        if np.any(indices[:,2:] < 0) or np.any(indices[:,2:] >= Kd[0]):
-            sel_out_bounds = (np.any(indices[:,2:] < 0, axis=1) | np.any(indices[:,2:] >= Kd[0], axis=1))
-            print(f"some values lie out of the interpolation array, these are not used, check baselines")
-            indices = indices[~sel_out_bounds]
-            values = values[~sel_out_bounds]
+#         #check if indices are within bounds, otherwise suppress them and raise warning
+#         if np.any(indices[:,2:] < 0) or np.any(indices[:,2:] >= Kd[0]):
+#             sel_out_bounds = (np.any(indices[:,2:] < 0, axis=1) | np.any(indices[:,2:] >= Kd[0], axis=1))
+#             print(f"some values lie out of the interpolation array, these are not used, check baselines")
+#             indices = indices[~sel_out_bounds]
+#             values = values[~sel_out_bounds]
         
-        
-        batch_indices = np.tile(indices[:,1:], [batch_size, 1])
+        self.indices = indices
+        self.values = values
+        batch_indices = np.tile(indices, [batch_size, 1])
         batch_indicators = np.repeat(np.arange(batch_size), (len(values)))
-        batch_indices = np.hstack((batch_indicators[:,None], batch_indices))
+        self.batch_indices = np.hstack((batch_indicators[:,None], batch_indices))
 
         values = np.array(values).reshape(-1)
-        batch_values = np.tile(values, batch_size).astype(np.float32)
+        self.batch_values = np.tile(values, [batch_size,1]).astype(np.float32).reshape(-1)
 
         # build sparse matrix
-        self.interp_matrix = tf.sparse.SparseTensor(batch_indices, batch_values, [batch_size, len(uv), Kd[0], Kd[1]])
+#         self.interp_matrix = tf.sparse.SparseTensor(batch_indices, batch_values, [batch_size, len(uv), Kd[0], Kd[1]])
         # self.interp_matrix = tf.sparse.reorder(self.interp_matrix)
 
     
 
     def dir_op(self, xx):
         xx = tf.cast(xx, tf.complex64)
-        # xx = xx/self.scaling
+#         xx = xx/self.scaling
         xx = self._pad(xx)
         
         kk = self._xx2kk(xx) / self.Kd[0] # unitary
         
-        kk = kk[:, None, :, :] # adding axes for sparse multiplication; shape [batch_size, 1, K, K]
+#         kk = kk[:, None, :, :] # adding axes for sparse multiplication; shape [batch_size, 1, K, K]
         # split real and imaginary parts because complex operations not defined for sparseTensors
+        return self._kk2k(kk)
         k_real = tf.cast(self._kk2k(tf.math.real(kk)), tf.complex64)
         k_imag = tf.cast(self._kk2k(tf.math.imag(kk)), tf.complex64)
         return k_real + 1j * k_imag
@@ -89,10 +91,27 @@ class NNFFT2D_TF():
     
     def _kk2k(self, kk):
         """interpolates of the grid to non uniform measurements"""
+        v = tf.gather_nd(kk, self.batch_indices)
+        r = tf.reshape(v * self.batch_values, (self.batch_size, self.n_measurements, self.Jd[0]*self.Jd[1])) 
+        return tf.reduce_sum(r, axis=2)
+        
+        # catch values from array
+        # multiply with values
+        # reshape array to match kernel size (Jd)
+        # take sum over kernel dimension
         return tf.sparse.reduce_sum(self.interp_matrix * kk, axis=(2,3))
-            
+        
     def _k2kk(self, k):
         """convolutes measurements to oversampled fft grid"""
+        # multiply with kernel values
+        # fill array from values and indices    
+        k = tf.reshape(k, [-1])
+        interp = k * self.batch_values
+        f = tf.scatter_nd(self.batch_indices, interp, [self.batch_size] + list(self.Kd))
+        return f
+        
+        
+        
         return tf.sparse.reduce_sum(self.interp_matrix * k, axis=1 )
     
     @staticmethod
