@@ -1,5 +1,5 @@
-import csv
 import time
+import os
 import numpy as np
 import tensorflow as tf
 
@@ -10,6 +10,7 @@ class TimeOutCallback(tf.keras.callbacks.Callback):
         super().__init__()
         self.timeout = timeout  # time in minutes
         self.checkpoint_path = checkpoint_path
+        os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
 
     def on_train_begin(self, logs=None):
         self.t0 = time.time()
@@ -19,9 +20,14 @@ class TimeOutCallback(tf.keras.callbacks.Callback):
             print(f"\nReached {(time.time() - self.t0) / 60:.3f} minutes of training, stopping")
             self.model.stop_training = True
             self.model.save_weights(self.checkpoint_path.format(epoch=epoch+1))
-            
+
+
 class CSV_logger_plus(tf.keras.callbacks.CSVLogger):
     """A CSV logger that logs the time since start of training as well as the epochs"""
+    def __init__(self, filename, *args, **kwargs):
+        super().__init__(filename, *args, **kwargs)
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+
     def on_train_begin(self, logs=None):
         self.t0 = time.time() # start time
         super().on_train_begin(logs)
@@ -29,12 +35,11 @@ class CSV_logger_plus(tf.keras.callbacks.CSVLogger):
     def on_epoch_end(self, epoch, logs=None):
         logs['time'] = time.time() - self.t0
         super().on_epoch_end(epoch, logs)
-        
-        
-        
+         
 
 class PredictionTimeCallback(tf.keras.callbacks.Callback):    
     def __init__(self, filename, batch_size=1):
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
         self.csv_file = open(filename, "w")
         self.begin_timings = []
         self.end_timings = []
@@ -80,13 +85,3 @@ class PredictionTimeCallback(tf.keras.callbacks.Callback):
           [0 if w_i is None else w_i for w_i in w] for w in weight_shapes
         ]
         return int(sum(np.prod(p) for p in standardized_weight_shapes))
-
-    
-class CSV_logger_plus(tf.keras.callbacks.CSVLogger):
-    def on_train_begin(self, logs=None):
-        self.t0 = time.time() # start time
-        super().on_train_begin(logs)
-    
-    def on_epoch_end(self, epoch, logs=None):
-        logs['time'] = time.time() - self.t0
-        super().on_epoch_end(epoch, logs)
