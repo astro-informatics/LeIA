@@ -41,18 +41,22 @@ class NUFFT2D_TF():
         indices = np.array(indices).reshape(-1, 4)
         
         # #check if indices are within bounds, otherwise suppress them and raise warning
-        # if np.any(indices[:,-2:] < 0) or np.any(indices[:,-2:] >= Kd[0]):
-        #     sel_out_bounds = (np.any(indices[:,-2:] < 0, axis=1) | np.any(indices[:,-2:] >= Kd[0], axis=1))
-        #     print(f"some values lie out of the interpolation array, these are not used, check baselines")
-        #     indices = indices[~sel_out_bounds]
-        #     values = values[~sel_out_bounds]
-        
+
         batch_indices = np.tile(indices[:,-2:], [batch_size, 1])
         batch_indicators = np.repeat(np.arange(batch_size), (len(values)))
         self.batch_indices = np.hstack((batch_indicators[:,None], batch_indices))
 
         values = np.array(values).reshape(-1)
         self.batch_values = np.tile(values, [batch_size,1]).astype(np.float32).reshape(self.batch_size, self.n_measurements, self.Jd[0]*self.Jd[1])
+
+        if np.any(self.batch_indices[:,-2:] < 0) or np.any(self.batch_indices[:,-2:] >= Kd[0]):
+            self.sel_out_bounds = (np.any(self.batch_indices[:,-2:] < 0, axis=1) | np.any(self.batch_indices[:,-2:] >= Kd[0], axis=1))
+            print(f"some values lie out of the interpolation array, these are not used, check baselines")
+            # indices = indices[~sel_out_bounds]
+            # values = values[~sel_out_bounds]
+        else:
+            self.sel_out_bounds = np.zeros(len(self.batch_indices), dtype=bool)
+        self.batch_indices_sel = self.batch_indices[~self.sel_out_bounds]
 
         # build sparse matrix
 #         self.interp_matrix = tf.sparse.SparseTensor(batch_indices, batch_values, [batch_size, len(uv), Kd[0], Kd[1]])
@@ -147,7 +151,9 @@ class NUFFT2D_TF():
 #         k = tf.reshape(k, [-1])
         interp = k[:,:,None] * self.batch_values
         interp = tf.reshape(interp, [-1])
-        f = tf.scatter_nd(self.batch_indices, interp, [self.batch_size] + list(self.Kd))
+
+        interp = tf.boolean_mask(interp, ~self.sel_out_bounds)
+        f = tf.scatter_nd(self.batch_indices_sel, interp, [self.batch_size] + list(self.Kd))
         return f
         
     

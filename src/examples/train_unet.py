@@ -1,3 +1,4 @@
+from functools import partial
 from tensorflow.python.framework.ops import disable_eager_execution
 disable_eager_execution()
 
@@ -12,6 +13,8 @@ from tensorflow.keras import callbacks
 # operators and sampling patterns
 from src.operators.NUFFT2D_TF import NUFFT2D_TF
 from src.operators.NNFFT2D_TF import NNFFT2D_TF
+from src.operators.IdentityOperator import IdentityOperator
+
 from src.sampling.uv_sampling import spider_sampling, random_sampling
 
  # some custom callbacks
@@ -19,7 +22,7 @@ from src.callbacks import PredictionTimeCallback, TimeOutCallback, CSV_logger_pl
 
 # model and dataset generator
 from src.networks.UNet import UNet
-from src.dataset import PregeneratedDataset, data_map
+from src.dataset import Dataset, PregeneratedDataset, data_map, make_yogadl_dataset, measurement_func, random_crop, data_map_image
 
 # selecting one gpu to train on
 from src.util import gpu_setup
@@ -28,7 +31,7 @@ gpu_setup()
 
 #TODO add a nice argument parser
 
-epochs = 100
+epochs = 200
 set_size = 2000 # size of the train set
 save_freq = 20 # save every 20 epochs
 batch_size = 20 
@@ -52,6 +55,8 @@ data = "COCO"
 Nd = (256, 256)
 Kd = (512, 512)
 Jd = (6,6)
+
+input_type="measurements"
 
 if operator == "NUFFT_SPIDER":
     uv = spider_sampling()
@@ -79,8 +84,14 @@ elif operator == "NUFFT_Random":
 elif operator == "NNFFT_Random":
     y_shape = int(Nd[0]**2/2)
     uv = random_sampling(y_shape)
-    op = NUFFT2D_TF
+    op = NNFFT2D_TF
     w = np.ones(len(uv)) # no weights necessary for 50% sampling
+elif operator == "Identity":
+    y_shape = Nd
+    op = IdentityOperator
+    input_type="image"
+    w = 1
+    uv = None
 else:
     print("No such operator")
     exit()
@@ -92,16 +103,25 @@ model = UNet(
     uv=uv,
     op=op, 
     depth=4, 
-    input_type="measurements", 
+    input_type=input_type, 
     measurement_weights=w,
     batch_size=batch_size
     )
 
-if not load_weights: 
-    dataset = PregeneratedDataset(
-    operator=operator, epochs=epochs
-    ).take(1).unbatch().batch(batch_size=batch_size, num_parallel_calls=tf.data.AUTOTUNE).map(lambda x, y: data_map(x,y, y_size=len(uv)), num_parallel_calls=tf.data.AUTOTUNE).prefetch(100)
-
+if not load_weights:
+    try:  
+        dataset = PregeneratedDataset(
+        operator=operator, epochs=epochs
+        ).unbatch().batch(batch_size=batch_size, num_parallel_calls=tf.data.AUTOTUNE).map(lambda x, y: data_map(x,y, y_size=len(uv)), num_parallel_calls=tf.data.AUTOTUNE).prefetch(set_size//batch_size)
+    except:
+        data_map = data_map if input_type=="measurements" else data_map_image
+        print("creating dataset")
+        tf_func, func = measurement_func(uv,  m_op=op, Nd=(256,256), data_shape=y_shape, ISNR=ISNR)
+        ds = Dataset(set_size, data)
+        data_map = partial(data_map, y_size=y_shape, z_size=(256,256))
+        yogadl_dataset = make_yogadl_dataset(ds) # use yogadl for caching and shuffling the data
+        dataset = ds.map(random_crop).map(tf_func).batch(batch_size).map(data_map).prefetch(tf.data.experimental.AUTOTUNE)
+   
 
 # defining the necessary paths based on parameters
 project_folder = os.environ["HOME"] + "/src_aiai/"
@@ -146,6 +166,7 @@ if not load_weights:
         dataset,
         epochs=epochs, 
         callbacks=callbacks,
+        steps_per_epoch=set_size//batch_size
     )
 
 

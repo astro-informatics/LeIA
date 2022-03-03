@@ -33,12 +33,14 @@ class NNFFT2D_TF():
         values = np.array(values)
         indices = np.array(indices)
         
-#         #check if indices are within bounds, otherwise suppress them and raise warning
-#         if np.any(indices[:,2:] < 0) or np.any(indices[:,2:] >= Kd[0]):
-#             sel_out_bounds = (np.any(indices[:,2:] < 0, axis=1) | np.any(indices[:,2:] >= Kd[0], axis=1))
-#             print(f"some values lie out of the interpolation array, these are not used, check baselines")
-#             indices = indices[~sel_out_bounds]
-#             values = values[~sel_out_bounds]
+        if np.any(self.batch_indices[:,-2:] < 0) or np.any(self.batch_indices[:,-2:] >= Kd[0]):
+            self.sel_out_bounds = (np.any(self.batch_indices[:,-2:] < 0, axis=1) | np.any(self.batch_indices[:,-2:] >= Kd[0], axis=1))
+            print(f"some values lie out of the interpolation array, these are not used, check baselines")
+            # indices = indices[~sel_out_bounds]
+            # values = values[~sel_out_bounds]
+        else:
+            self.sel_out_bounds = np.zeros(len(self.batch_indices), dtype=bool)
+        self.batch_indices_sel = self.batch_indices[~self.sel_out_bounds]
         
         self.indices = indices
         self.values = values
@@ -107,12 +109,8 @@ class NNFFT2D_TF():
         # fill array from values and indices    
         k = tf.reshape(k, [-1])
         interp = k * self.batch_values
-        f = tf.scatter_nd(self.batch_indices, interp, [self.batch_size] + list(self.Kd))
+        f = tf.scatter_nd(self.batch_indices_sel, interp, [self.batch_size] + list(self.Kd))
         return f
-        
-        
-        
-        return tf.sparse.reduce_sum(self.interp_matrix * k, axis=1 )
     
     @staticmethod
     def _kk2xx(kk):
