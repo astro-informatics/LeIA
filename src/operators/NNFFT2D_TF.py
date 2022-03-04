@@ -108,6 +108,8 @@ class NNFFT2D_TF():
         # fill array from values and indices    
         k = tf.reshape(k, [-1])
         interp = k * self.batch_values
+        interp = tf.boolean_mask(interp, ~self.sel_out_bounds)
+
         f = tf.scatter_nd(self.batch_indices_sel, interp, [self.batch_size] + list(self.Kd))
         return f
     
