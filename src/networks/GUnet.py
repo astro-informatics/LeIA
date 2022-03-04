@@ -58,7 +58,7 @@ class GUnet(tf.keras.Model):
         conv_layers=1, 
         kernel_size=3, 
         output_activation='linear', 
-        input_type="image",
+        input_type="measurements",
         batch_size=20
         ):
 

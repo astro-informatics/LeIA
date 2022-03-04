@@ -49,7 +49,7 @@ def conv_block(x, conv_layers, filters, kernel_size, activation, name):
     return x 
 
 
-class GUnet_variant2(tf.keras.Model):
+class GUnet_variant(tf.keras.Model):
     def __init__(
         self, 
         image_shape, 
@@ -61,7 +61,7 @@ class GUnet_variant2(tf.keras.Model):
         conv_layers=1, 
         kernel_size=3, 
         output_activation='linear', 
-        input_type="image",
+        input_type="measurements",
         batch_size=20
         ):
 
