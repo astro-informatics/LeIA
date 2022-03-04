@@ -42,8 +42,14 @@ name_net_post = [
     
     ("U-net", "unet", "_sigmoid_same"),
     ("GU-net", "dunet", "_sigmoid_same"),
-    ("GU-net sigmoid 2", "dunet", "_sigmoid_same2"),
-    ("GU-net linear 2", "dunet", "_linear_same2"),
+    ("HL-net sigmoid", "highlow", "_sigmoid_2"),
+    ("HL-net linear", "highlow", "_linear_2"),
+    ("HL-net deep", "highlow", "_linear_deep"),
+    ("HL-net ramp", "highlow", "_linear_ramp"),
+
+
+    # ("GU-net sigmoid 2", "dunet", "_sigmoid_same2"),
+    # ("GU-net linear 2", "dunet", "_linear_same2"),
 #     ("U-net small", "unet", "_sigmoid_small"),
 #     ("dU-net small", "dunet", "_sigmoid_small"),
 #     ("U-net smaller", "unet", "_sigmoid_smaller"),

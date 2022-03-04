@@ -8,11 +8,13 @@ astropy==4.1
 pynufft==2020.2.6
 jupyterlab==2.2
 scikit-image==0.18
-tensorflow==2.5
+tensorflow==2.7
 pandas
 seaborn
 scipy
 sparse
+yogadl
+tfkbnufft
 
 # optimus primal ( https://github.com/Luke-Pratley/Optimus-Primal )
 ##optimusprimal==0.0.1

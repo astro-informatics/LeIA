@@ -6,6 +6,7 @@ import pickle
 import os
 import time
 import sys 
+from src.networks.highlow2 import HighLowPassNet
 from src.sampling.uv_sampling import spider_sampling
 from src.callbacks import PredictionTimeCallback
 from util import gpu_setup
@@ -21,7 +22,7 @@ learned_adjoint = bool(int(sys.argv[5]))
 learned_grad = bool(int(sys.argv[6]))
 grad_on_upsample = bool(int(sys.argv[7]))
 
-i = "_same2"
+i = "_2"
 # i = ""
 data = "COCO"
 # data = "GZOO"
@@ -89,24 +90,39 @@ elif network == "unet":
 elif network == "dunet":
     depth = 4
     grad = True
+elif network == "highlow":
+    depth=4
 else:
     print("not valid network option")
     exit()
 
-model = Unet(
-    (256,256,1), 
-    uv=uv, 
-    depth=depth, 
-    start_filters=16, 
-    conv_layers=3, 
-    kernel_size=3, 
-    conv_activation='relu', 
-    output_activation=activation, 
-    grad=grad, 
-    learned_adjoint=learned_adjoint, 
-    learned_grad=learned_grad, 
-    grad_on_upsample=grad_on_upsample
-)
+input_size= (256,256,1)
+if network == "highlow":
+    model = HighLowPassNet(
+        input_size,
+        uv=uv, 
+        depth=depth, 
+        start_filters=16, 
+        conv_layers=3, 
+        kernel_size=3, 
+        conv_activation='relu', 
+        output_activation=activation, 
+    )
+else:
+    model = Unet(
+        input_size,
+        uv=uv, 
+        depth=depth, 
+        start_filters=16, 
+        conv_layers=3, 
+        kernel_size=3, 
+        conv_activation='relu', 
+        output_activation=activation, 
+        grad=grad, 
+        learned_adjoint=learned_adjoint, 
+        learned_grad=learned_grad, 
+        grad_on_upsample=grad_on_upsample
+    )
 
 # print(model.summary())
 # exit()

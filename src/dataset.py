@@ -27,11 +27,8 @@ class Dataset(tf.data.Dataset):
 
     @staticmethod
     def _generator(num_samples, files=[]):
-
-        for sample_idx in range(num_samples):
-            if sample_idx >= len(files):
-                print(sample_idx)
-            
+        sample_idx = 0
+        while True:
             filename = str(files[sample_idx])
             if filename.startswith("b\'"): # filter out some weird behaviour with byte strings
                 filename = filename[2:-1]
@@ -48,6 +45,7 @@ class Dataset(tf.data.Dataset):
 #             data = tf.io.decode_jpeg(data, channels=1)
 
             yield im
+            sample_idx = (sample_idx + 1) % 2000 # TODO remove hardcoded value
 
     def __new__(cls, num_samples=200, data="COCO"):
 
@@ -145,7 +143,7 @@ def center_crop(x):
 
 
 def measurement(x, m_op, ISNR, data_shape, w, Nd=(256,256)):
-    y0 = m_op.dir_op(x.reshape(Nd))
+    y0 = m_op.dir_op(x.reshape(1, Nd[0], Nd[1]))
 
     sigma = np.sqrt(np.mean(np.abs(y0)**2)) * 10**(-ISNR/20)
     n = np.random.normal( 0, sigma, data_shape) + 1j * np.random.normal( 0, sigma, data_shape)
@@ -159,7 +157,7 @@ def measurement(x, m_op, ISNR, data_shape, w, Nd=(256,256)):
 #     return ((x_dirty.reshape(256,256,1), y.reshape(4440,1)), x.reshape(256,256,1))
 #     print(x_dirty.shape, y_dirty.shape)
 #     return (x_dirty.reshape(256,256,1).astype(np.float32), y_dirty.reshape(4440,1).astype(np.complex128), x.reshape(256,256,1).astype(np.float32))
-    return y_dirty.reshape(-1).astype(np.complex64), x.reshape(Nd).astype(np.float32)
+    return y_dirty.reshape(data_shape).astype(np.complex64), x.reshape(Nd).astype(np.float32)
 
 #     return (x_dirty, y_dirty, x)
 
@@ -168,26 +166,28 @@ def measurement(x, m_op, ISNR, data_shape, w, Nd=(256,256)):
 #     return tf.numpy_function(mapping_function, [x], (tf.float32, tf.float32))
 #     # return tf.py_function(mapping_function, [x], (tf.float32, tf.float32))
 
-def measurement_func(uv, Nd=(256,256), ISNR=30):
-    data_shape = (len(uv),)
+def measurement_func(uv, m_op = None, data_shape=None, Nd=(256,256), ISNR=30):
     """function for getting a tf function version of the measurment function"""
+    if data_shape is None:
+        data_shape = (len(uv),)
     # uv = spider_sampling()
-    m_op = NUFFT_op()
-    m_op.plan(uv, (Nd[0], Nd[1]), (Nd[0]*2, Nd[1]*2), (6,6))
+    if m_op is None:
+        m_op = NUFFT_op() # TODO change this operator to the new one
+        m_op.plan(uv, (Nd[0], Nd[1]), (Nd[0]*2, Nd[1]*2), (6,6))
 
-    grid_cell = 2*np.pi /512 
-    binned = (uv[:,:]+np.pi+.5*grid_cell) // grid_cell
-    binned = [tuple(x) for x in binned]
-    cells = set(binned)
-    w_gridded = np.zeros(uv.shape[0])
-    for cell in list(cells):
-        mask = np.all(np.array(cell) ==  binned, axis=1)
-        w_gridded[mask] = np.sum(mask)
+#     grid_cell = 2*np.pi /512 
+#     binned = (uv[:,:]+np.pi+.5*grid_cell) // grid_cell
+#     binned = [tuple(x) for x in binned]
+#     cells = set(binned)
+#     w_gridded = np.zeros(uv.shape[0])
+#     for cell in list(cells):
+#         mask = np.all(np.array(cell) ==  binned, axis=1)
+#         w_gridded[mask] = np.sum(mask)
 
-    # w = 
-    w = 1/w_gridded
-    w /= w.max()
-
+#     # w = 
+#     w = 1/w_gridded
+#     w /= w.max()
+    w = 1
     func = partial(measurement, m_op=m_op, ISNR=ISNR, data_shape=data_shape, w=w, Nd=Nd)
 
     @tf.function(input_signature=[tf.TensorSpec(None, tf.float32)])
@@ -211,6 +211,12 @@ def data_map(y,z, y_size=4440, z_size=(256,256)):
 #     return (x, y), z
     return y, z
 
+@tf.function()
+def data_map_image(y,z, y_size=4440, z_size=(256,256)):
+    """split input and output of train data"""
+    y.set_shape([None,z_size[0],z_size[1]])
+    z.set_shape([None,z_size[0],z_size[1]])
+    return y, z
 
 def benchmark(dataset, num_epochs=10):
     start_time = time.perf_counter()
@@ -228,3 +234,30 @@ def set_shape(x):
     a.set_shape([256,256,1])
     b.set_shape([256,256,1])
     return a, b
+
+
+class PregeneratedDataset(tf.data.Dataset):
+
+    @staticmethod
+    def _generator(epochs, operator="NUFFT_SPIDER"):
+        i = 0
+        try:
+            operator = operator.decode('utf-8')
+        except:
+            pass
+        while True:
+            x = np.load(f"./data/intermediate/COCO/{operator}/x_true_train_30dB_{i:03d}.npy")
+            y = np.load(f"./data/intermediate/COCO/{operator}/y_dirty_train_30dB_{i:03d}.npy")
+
+            yield y, x
+            i = (i + 1) % 100 # only a 100 presaved so reuse them
+
+    def __new__(cls, operator, epochs=100):
+        # assert os.path.exists(
+            # f"/data/intermediate/COCO/{operator}" ), \
+            # f"Could not find pregenerated dataset for operator {operator}"
+        return tf.data.Dataset.from_generator(
+            cls._generator,
+            output_types=(tf.complex64, tf.float32),
+            args=(epochs, operator)
+        )

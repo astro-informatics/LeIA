@@ -288,13 +288,16 @@ class NUFFT_op_TF():
     def __init__(self):
         pass
         
-    def plan(self, uv, Nd, Kd, Jd, batch_size):
+    def plan(self, uv, Nd, Kd, Jd, batch_size, measurement_weights=1, normalize=False):
         # saving some values
         self.Nd = Nd
         self.Kd = Kd
         self.Jd = Jd
         self.M = len(uv)
-        
+        self.measurement_weights = measurement_weights
+        self.normalization_factor = 1
+        self.batch_size = batch_size
+
         gridsize = 2*np.pi / Kd[0]
         k = (uv + np.pi) / gridsize
         
@@ -340,12 +343,15 @@ class NUFFT_op_TF():
         self.forward = self.dir_op
         self.adjoint = self.adj_op
 
+        if normalize:
+            self._normalize()
+
     def dir_op(self, xx):
         xx = tf.cast(xx, tf.complex64)
         xx = xx/self.scaling
         xx = self._pad(xx)
         
-        kk = self._xx2kk(xx)
+        kk = self._xx2kk(xx) / self.Kd[0]
         
         kk = kk[:, None, :, :] # adding axes for sparse multiplication; shape [batch_size, 1, K, K]
         # split real and imaginary parts because complex operations not defined for sparseTensors
@@ -354,17 +360,21 @@ class NUFFT_op_TF():
         return k_real + 1j * k_imag
         
     
-    def adj_op(self, k):
+    def adj_op(self, k, measurement_weighting=False):
         # split real and imaginary parts because complex operations not defined for sparseTensors
+        if measurement_weighting:
+            k = k * self.measurement_weights # weighting measurements
         k = k[:,:, None, None] # adding axes for sparse multiplication; shape [batch_size, M, 1, 1]
         k_real = tf.math.real(k)
         k_imag = tf.math.imag(k)
         kk_real = tf.cast(self._k2kk(k_real), tf.complex64)
         kk_imag = tf.cast(self._k2kk(k_imag), tf.complex64)
         kk = kk_real + 1j* kk_imag
-        xx = self._kk2xx(kk)
+        xx = self._kk2xx(kk) * self.Kd[0]
         xx = self._unpad(xx)
         xx = xx / self.scaling
+        if measurement_weighting:
+            xx = xx / self.normalization_factor # normalising for operator norm
         return xx
     
     def learned_adj_op(self, k):
@@ -405,7 +415,7 @@ class NUFFT_op_TF():
     @staticmethod
     def _kk2xx(kk):
         """from 2d fourier space to 2d image space"""
-        return tf.signal.ifftshift(tf.signal.ifft2d(tf.signal.ifftshift(kk, axes=(-2,-1))), axes=(-2,-1))
+        return tf.signal.ifftshift(tf.signal.ifft2d(tf.signal.ifftshift(kk, axes=(-2,-1))), axes=(-2,-1)) 
 
     @staticmethod
     def _xx2kk(xx):
@@ -429,6 +439,14 @@ class NUFFT_op_TF():
             (self.Kd[1]-self.Nd[1])//2: (self.Kd[1]-self.Nd[1])//2 +self.Nd[1]
             ] # remove zero padding from image
 
+    def _normalize(self):
+        # normalise operator norm on random (0,1) image
+        t = np.random.normal(size=(self.batch_size, self.Nd[0], self.Nd[1])).astype(np.float32)
+        t = (t - t.min())/(t.max()-t.min())
+#         t = self.adj_op(self.dir_op(t))
+        new_t = self.adj_op(self.dir_op(t), measurement_weighting=True)
+        
+        self.nu =  tf.norm(tf.math.real(new_t))/tf.norm(t)
 
 class old_NUFFT_op():
     """Simple measurement operator using the pyNUFFT package to sample at non-uniform u,v coordinates"""
