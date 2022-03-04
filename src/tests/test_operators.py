@@ -36,7 +36,7 @@ def dot_product_test_TF(op, shape_x, shape_y):
 
     a = tf.math.reduce_sum(tf.math.conj(y) * y_)
     b = tf.math.reduce_sum(tf.math.conj(x_) * x)
-    assert tf.debugging.assert_near(a, b)
+    tf.debugging.assert_near(a, b)
 
 @pytest.fixture()
 def shape_x():
@@ -56,7 +56,7 @@ def uv(shape_y):
 @pytest.fixture()
 def NUFFT2D_op(uv, shape_x):
     op = NUFFT2D()
-    op.plan(uv, Nd=shape_x, Kd=(64,64), Jd=(3,3))
+    op.plan(uv, Nd=shape_x, Kd=(64,64), Jd=(6,6))
     return op
 
 @pytest.fixture()
@@ -89,7 +89,7 @@ def test_self_adjointness_NNFFT2D(NNFFT2D_op, shape_x, shape_y):
 def test_self_adjointness_NNFFT2D_TF(NNFFT2D_TF_op, shape_x, shape_y):
     dot_product_test_TF(NNFFT2D_TF_op, shape_x=shape_x, shape_y=shape_y)
 
-def not_test_np_vs_TF(shape_x, shape_y, NUFFT2D_op, NUFFT2D_TF_op, NNFFT2D_op, NNFFT2D_TF_op):
+def test_np_vs_TF(shape_x, shape_y, NUFFT2D_op, NUFFT2D_TF_op, NNFFT2D_op, NNFFT2D_TF_op):
     x = np.random.normal(size=shape_x)[np.newaxis, :]
     x_TF = tf.convert_to_tensor(x, dtype=tf.complex64)
 
@@ -97,15 +97,15 @@ def not_test_np_vs_TF(shape_x, shape_y, NUFFT2D_op, NUFFT2D_TF_op, NNFFT2D_op, N
         + 1j * np.random.normal(size=shape_y)[np.newaxis, :]
     y_TF = tf.convert_to_tensor(y, dtype=tf.complex64)
 
-    assert tf.debugging.assert_near(NUFFT2D_op.dir_op(x).astype(np.complex64), NUFFT2D_TF_op.dir_op(x_TF)), "nufft forward not the same"
-    assert tf.debugging.assert_near(NUFFT2D_op.adj_op(y).astype(np.complex64), NUFFT2D_TF_op.adj_op(y_TF)), "nufft adjoint not the same"
+    tf.debugging.assert_near(NUFFT2D_op.dir_op(x).astype(np.complex64), NUFFT2D_TF_op.dir_op(x_TF)), "nufft forward not the same"
+    tf.debugging.assert_near(NUFFT2D_op.adj_op(y).astype(np.complex64), NUFFT2D_TF_op.adj_op(y_TF)), "nufft adjoint not the same"
 
 
     y = np.random.normal(size=NNFFT2D_op.n_measurements)[np.newaxis, :] \
         + 1j * np.random.normal(size=NNFFT2D_op.n_measurements)[np.newaxis, :]
     y_TF = tf.convert_to_tensor(y, dtype=tf.complex64)
 
-    assert tf.debugging.assert_near(NNFFT2D_op.dir_op(x).astype(np.complex64), NNFFT2D_TF_op.dir_op(x_TF)), "nufft forward not the same"
-    assert tf.debugging.assert_near(NNFFT2D_op.adj_op(y).astype(np.complex64), NNFFT2D_TF_op.adj_op(y_TF)), "nufft adjoint not the same"
+    tf.debugging.assert_near(NNFFT2D_op.dir_op(x).astype(np.complex64), NNFFT2D_TF_op.dir_op(x_TF)), "nufft forward not the same"
+    tf.debugging.assert_near(NNFFT2D_op.adj_op(y).astype(np.complex64), NNFFT2D_TF_op.adj_op(y_TF)), "nufft adjoint not the same"
 
     # NNFFT2D_op, NNFFT2D_TF_op
