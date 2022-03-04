@@ -25,7 +25,7 @@ gpu_setup()
 
 #TODO add a nice argument parser
 
-epochs = 100
+epochs = 500
 set_size = 2000 # size of the train set
 save_freq = 20 # save every 20 epochs
 batch_size = 20 
@@ -76,7 +76,7 @@ elif operator == "NUFFT_Random":
 elif operator == "NNFFT_Random":
     y_shape = int(Nd[0]**2/2)
     uv = random_sampling(y_shape)
-    op = NUFFT2D_TF
+    op = NNFFT2D_TF
     w = np.ones(len(uv)) # no weights necessary for 50% sampling
 else:
     print("No such operator")
@@ -95,7 +95,8 @@ model = LFB(
 if not load_weights: 
     dataset = PregeneratedDataset(
     operator=operator, epochs=epochs
-    ).take(1).unbatch().batch(batch_size=batch_size, num_parallel_calls=tf.data.AUTOTUNE).map(lambda x, y: data_map(x,y, y_size=len(uv)), num_parallel_calls=tf.data.AUTOTUNE).prefetch(100)
+    ).unbatch().batch(batch_size=batch_size, num_parallel_calls=tf.data.AUTOTUNE).map(lambda x, y: data_map(x,y, y_size=len(uv)), num_parallel_calls=tf.data.AUTOTUNE).prefetch(set_size//batch_size)
+
 
 # defining the necessary paths based on parameters
 project_folder = os.environ["HOME"] + "/src_aiai/"
@@ -139,7 +140,10 @@ if not load_weights:
         dataset,
         epochs=epochs, 
         callbacks=callbacks,
+        steps_per_epoch=set_size//batch_size
     )
+
+exit()
 
 
 # for saving how long predictions take

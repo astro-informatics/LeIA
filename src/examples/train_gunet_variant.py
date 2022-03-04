@@ -7,8 +7,6 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras import callbacks
 
-tf.compat.v1.disable_eager_execution() # GUNet cannot use eager execution
-
 # operators and sampling patterns
 from src.operators.NUFFT2D_TF import NUFFT2D_TF
 from src.operators.NNFFT2D_TF import NNFFT2D_TF
@@ -18,7 +16,7 @@ from src.sampling.uv_sampling import spider_sampling, random_sampling
 from src.callbacks import PredictionTimeCallback, TimeOutCallback, CSV_logger_plus 
 
 # model and dataset generator
-from src.networks.GUnet import GUnet
+from src.networks.GUnet_variant import GUnet_variant2
 from src.dataset import PregeneratedDataset, data_map
 
 # selecting one gpu to train on
@@ -36,7 +34,7 @@ max_train_time = 40*60 # time after which training should stop in mins
 
 
 ISNR = 30 #dB
-network = "GUnet"
+network = "GUnet_variant"
 activation = "linear"
 load_weights = bool(int(sys.argv[1])) # continuing the last run
 operator = str(sys.argv[2])
@@ -87,7 +85,7 @@ else:
 
 
 
-model = GUnet(
+model = GUnet_variant2(
     Nd, 
     uv=uv,
     op=op, 

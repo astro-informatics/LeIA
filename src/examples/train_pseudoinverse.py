@@ -76,7 +76,7 @@ elif operator == "NUFFT_Random":
 elif operator == "NNFFT_Random":
     y_shape = int(Nd[0]**2/2)
     uv = random_sampling(y_shape)
-    op = NUFFT2D_TF
+    op = NNFFT2D_TF
     w = np.ones(len(uv)) # no weights necessary for 50% sampling
 else:
     print("No such operator")

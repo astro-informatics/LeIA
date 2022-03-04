@@ -9,6 +9,8 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras import callbacks
 
+tf.compat.v1.disable_eager_execution() # HighLowPassNet cannot use eager execution
+
 # operators and sampling patterns
 from src.operators.NUFFT2D_TF import NUFFT2D_TF
 from src.operators.NNFFT2D_TF import NNFFT2D_TF
@@ -19,7 +21,7 @@ from src.callbacks import PredictionTimeCallback, TimeOutCallback, CSV_logger_pl
 
 # model and dataset generator
 # from src.networks.UNet import Unet
-from src.networks.highlow_fft import HighLowPassNet_fft
+from src.networks.HighLowPassNet import HighLowPassNet
 
 from src.dataset import PregeneratedDataset, data_map
 
@@ -29,7 +31,7 @@ from src.dataset import PregeneratedDataset, data_map
 
 #TODO add a nice argument parser
 
-epochs = 100
+epochs = 200
 set_size = 2000 # size of the train set
 save_freq = 20 # save every 20 epochs
 batch_size = 20 
@@ -79,24 +81,26 @@ elif operator == "NUFFT_Random":
 elif operator == "NNFFT_Random":
     y_shape = int(Nd[0]**2/2)
     uv = random_sampling(y_shape)
-    op = NUFFT2D_TF
+    op = NNFFT2D_TF
     w = np.ones(len(uv)) # no weights necessary for 50% sampling
 else:
     print("No such operator")
     exit()
 
 
-model = HighLowPassNet_fft(
+model = HighLowPassNet(
     Nd, 
     uv=uv,
     op=op, 
     depth=4, 
     measurement_weights=w,
     )
+
 if not load_weights: 
     dataset = PregeneratedDataset(
     operator=operator, epochs=epochs
-    ).take(1).unbatch().batch(batch_size=batch_size).map(lambda x, y: data_map(x,y, y_size=len(uv))).prefetch(tf.data.experimental.AUTOTUNE)
+    ).unbatch().batch(batch_size=batch_size, num_parallel_calls=tf.data.AUTOTUNE).map(lambda x, y: data_map(x,y, y_size=len(uv)), num_parallel_calls=tf.data.AUTOTUNE).prefetch(set_size//batch_size)
+
 
 
 # defining the necessary paths based on parameters
@@ -140,6 +144,7 @@ if not load_weights:
         dataset, 
         epochs=epochs, 
         callbacks=callbacks,
+        steps_per_epoch=set_size//batch_size
     )
 
 

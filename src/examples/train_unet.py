@@ -92,6 +92,7 @@ elif operator == "Identity":
     input_type="image"
     w = 1
     uv = None
+    ISNR=15 # more noise for image domain
 else:
     print("No such operator")
     exit()
