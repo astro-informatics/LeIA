@@ -1,9 +1,7 @@
-
 import numpy as np
 import tensorflow as tf
 
 from src.networks.UNet import UNet
-# from src.networks.PseudoInverse import PsuedoInverse
 
 
 class Gradient(tf.keras.layers.Layer):
@@ -59,10 +57,24 @@ class LFB(tf.keras.Model):
 
         gradient = Gradient(m_op, image_shape, m_op.n_measurements, 0)
 
-        lr = tf.keras.layers.Dense(1, use_bias=False)
-        for i in range(7):
-            x = x + lr( gradient(x, inputs))
+        # lr = tf.keras.layers.Dense(1, use_bias=False)
+        lr = tf.Variable([0.1], trainable=True, shape=[1])
+
+        for i in range(3):
+            # gradient step
+            x = x - lr * gradient(x, inputs)
+
+            mx_tmp = tf.math.reduce_max(x, axis=(1,2), keepdims=True)
+            mn_tmp = tf.math.reduce_min(x, axis=(1,2), keepdims=True)
+            # scale between (0,1)
+            # mx_tmp *= 1.01
+            x = (x - mn_tmp)/(mx_tmp - mn_tmp)
+            # denoise
             x = unet(x)
+            #rescale to original scale
+            x = x*(mx_tmp - mn_tmp) + mn_tmp
+            # TODO adapt for noise variations in normalisation? or normalise after adding noise?
+
         outputs = x
 
         super().__init__(inputs=[inputs], outputs=outputs)

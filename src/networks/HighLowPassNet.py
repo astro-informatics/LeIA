@@ -1,15 +1,7 @@
-
-from email import message
-from mimetypes import init
 import tensorflow as tf
 import numpy as np
 from src.operators.NNFFT2D_TF import NNFFT2D_TF
-
-from tensorflow.python.framework.ops import disable_eager_execution
-# disable_eager_execution()
-
-
-    
+  
 class DownSample(tf.keras.layers.Layer):
     """Seperates a vector of measurements into high and low frequency measurements
 
@@ -110,7 +102,7 @@ class Gradient(tf.keras.layers.Layer):
         return grad
 
 
-class HighLowPassNet_fft(tf.keras.Model):
+class HighLowPassNet(tf.keras.Model):
     def __init__(self, 
         input_shape, 
         uv, 
@@ -123,6 +115,8 @@ class HighLowPassNet_fft(tf.keras.Model):
         output_activation='linear', 
         measurement_weights=None
         ):
+
+        assert not tf.executing_eagerly(), "HighLowPassNet cannot be run in eager execution mode, make sure to disable eager execution using `tf.compat.v1.disable_eager_execution()`"
 
         batch_size = 20
         self.is_adapted=False
@@ -231,13 +225,13 @@ def grad_block(x_, grad_layers, freq_info, i, freq_weights=1):
     with tf.name_scope("grad_" + str(i)):
         
 #         x_ = tf.stack([x_, grad ], axis=3)
-        dirty_im = tf.math.real(grad_layers[i].m_op.adj_op( freq_info[i] ))
+        # dirty_im = tf.math.real(grad_layers[i].m_op.adj_op( freq_info[i] ))
         # grad = grad_layers[i](x_, freq_info[i])
         filtered_grad = grad_layers[i](x_, freq_info[i], measurement_weights=freq_weights)
         # x_ = tf.stack([x_, dirty_im, grad, filtered_grad], axis=3)
-        # x_ = tf.stack([x_, filtered_grad], axis=3)
+        x_ = tf.stack([x_, filtered_grad], axis=3)
 
-        x_ = tf.stack([x_, dirty_im, filtered_grad], axis=3)
+        # x_ = tf.stack([x_, dirty_im, filtered_grad], axis=3)
 
         # x_ = tf.keras.layers.BatchNormalization()(x_)
     return x_

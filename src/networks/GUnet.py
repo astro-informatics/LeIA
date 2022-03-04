@@ -1,8 +1,6 @@
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.framework.ops import disable_eager_execution
-disable_eager_execution()
 
 class Gradient(tf.keras.layers.Layer):
     """
@@ -24,7 +22,6 @@ class Gradient(tf.keras.layers.Layer):
         self.depth = depth +1
         self.trainable=False
     
-
     def __call__(self, x, y, measurement_weights=1):
         x = tf.cast(x, tf.complex64)
         m = self.m_op.dir_op(x) 
@@ -65,6 +62,7 @@ class GUnet(tf.keras.Model):
         batch_size=20
         ):
 
+        assert not tf.executing_eagerly(), "GUNet cannot be run in eager execution mode, make sure to disable eager execution using `tf.compat.v1.disable_eager_execution()`"
         if measurement_weights is None:
             measurement_weights = np.ones(len(uv))
 
@@ -206,7 +204,9 @@ class GUnet(tf.keras.Model):
     def _grad_block(x_, grad_layers, y, i, freq_weights=1):
         with tf.name_scope("grad_" + str(i)):
             filtered_grad = grad_layers[i](x_[:,:,:,0], y, measurement_weights=freq_weights)
-            filtered_grad = tf.expand_dims(filtered_grad, axis=3)
-            x_ = tf.concat([x_, filtered_grad], axis=3)
-        return x_
-
+            # if the weights are not uniform, add a non-weighted gradient
+            if np.all(freq_weights != np.ones(len(freq_weights))):
+                grad = grad_layers[i](x_[:,:,:,0], y, measurement_weights=1)
+                return tf.stack([x_[:,:,:,0], grad, filtered_grad], axis=3)
+            else: 
+                return tf.stack([x_[:,:,:,0], filtered_grad], axis=3)
