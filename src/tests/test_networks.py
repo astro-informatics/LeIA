@@ -30,7 +30,7 @@ def test_highlow():
     measurement_weights = np.linalg.norm(uv, axis=1)
     measurement_weights /= measurement_weights.max()
 
-    m = HighLowPassNet_fft(shape, uv=uv, op=NUFFT2D_TF, measurement_weights=measurement_weights)
+    m = HighLowPassNet(shape, uv=uv, op=NUFFT2D_TF, measurement_weights=measurement_weights)
     # print(m.summary())
 
 
@@ -42,5 +42,5 @@ def test_GUNet():
     measurement_weights = np.linalg.norm(uv, axis=1)
     measurement_weights /= measurement_weights.max()
 
-    m = HighLowPassNet_fft(shape, uv=uv, op=NUFFT2D_TF, measurement_weights=measurement_weights)
+    m = HighLowPassNet(shape, uv=uv, op=NUFFT2D_TF, measurement_weights=measurement_weights)
     # print(m.summary())
