@@ -2,6 +2,10 @@
 from functools import partial
 from tensorflow.keras import callbacks
 from src.network import Unet
+# from src.networks.highlow2 import HighLowPassNet
+from src.networks.highlow_fft import HighLowPassNet_fft as HighLowPassNet
+from src.operators.discrete_fft_op import fft_op as NUFFT_op_TF
+
 import numpy as np
 import tensorflow as tf
 import pickle 
@@ -46,7 +50,8 @@ data = sys.argv[8]
 set_size = 2000
 
 train_time = 10*60 # time after which training should stop in mins
-i = "_same2"
+# i = "_same2"
+i = "_unitary_discrete_sample"
 # grad = False # 40x slower (27x)
 
 postfix = "_" + activation
@@ -108,13 +113,15 @@ def unpreprocess(x, m, s):
 # x_true_dirty, m, s = preprocess(x_true_dirty)
 # x_test_dirty, *_ = preprocess(x_test_dirty)
 
-epochs = 1000
-save_freq = 50
+epochs = 200
+save_freq = 5
 batch_size = 20
 
 n_spokes = 37 
 # n_spokes = 85 # Changed the ammount of spokes, is different from the prebuilt datasets
-uv = spider_sampling(n_spokes=n_spokes)
+# uv = spider_sampling(n_spokes=n_spokes)
+uv = (np.random.randn(2, 16384)).T
+uv /= np.max(np.abs(uv)) * np.pi
 input_size = (256,256,1)
 # input_size = (128,128,1)
 
@@ -131,29 +138,41 @@ elif network == "dunet":
     depth = 4
     # depth = 2
     grad = True
+elif network == "highlow":
+    depth=5
 else:
     print("not valid network option")
     exit()
 
-model = Unet(
-    input_size,
-    uv=uv, 
-    depth=depth, 
-    start_filters=16, 
-    conv_layers=3, 
-    kernel_size=3, 
-    conv_activation='relu', 
-    output_activation=activation, 
-    grad=grad, 
-    learned_adjoint=learned_adjoint, 
-    learned_grad=learned_grad, 
-    grad_on_upsample=grad_on_upsample
-)
+
+if network == "highlow":
+    model = HighLowPassNet(
+        input_size,
+        uv=uv, 
+        depth=depth, 
+        start_filters=16, 
+        conv_layers=3, 
+        kernel_size=3, 
+        conv_activation='relu', 
+        output_activation=activation, 
+    )
+else:
+    model = Unet(
+        input_size,
+        uv=uv, 
+        depth=depth, 
+        start_filters=16, 
+        kernel_size=3, 
+        conv_activation='relu', 
+        output_activation=activation, 
+        grad=grad,  
+        learned_adjoint=learned_adjoint, 
+        learned_grad=learned_grad, 
+        grad_on_upsample=grad_on_upsample
+    )
 
 
 
-# print(model.summary())
-# exit()
 
 
 print("loading weights")
@@ -193,13 +212,17 @@ callbacks = [
 
 # early_stopping = tf.keras.callbacks.EarlyStopping(patience=100, restore_best_weights=True)
 
+m_op = NUFFT_op_TF()
+m_op.plan(uv, Nd=input_size[:2],  Kd=(512, 512), Jd=(6,6), batch_size=20)
+
 print("creating dataset")
-tf_func, func = measurement_func(uv, Nd=input_size[:2], ISNR=ISNR)
+tf_func, func = measurement_func(uv,  m_op=None, Nd=input_size[:2], ISNR=ISNR)
 ds = Dataset(set_size, data)
 data_map = partial(data_map, y_size=len(uv), z_size=input_size[:2])
 yogadl_dataset = make_yogadl_dataset(ds) # use yogadl for caching and shuffling the data
 if data in ["COCO", "SATS"]:
     dataset = ds.take(200).map(random_crop).map(tf_func).batch(batch_size).map(data_map).prefetch(tf.data.experimental.AUTOTUNE)
+    # dataset = ds.take(200).map(random_crop).map(tf_func).batch(batch_size).map(data_map).snapshot("/mnt/mars/data/").prefetch(20)
 elif data == "GZOO":
     dataset = ds.take(200).map(center_crop).map(tf_func).batch(batch_size).map(data_map).prefetch(tf.data.experimental.AUTOTUNE)
 elif data == "LLPS":
@@ -234,6 +257,7 @@ try:
 except: 
     pass
 
+pickle.dump(history.history, open(project_folder + f"results/{data}/history_{network}_{ISNR}dB" + postfix + ".pkl", "wb"))
 
 print("predict train")
 train_predict = model.predict(y_dirty, batch_size=batch_size, callbacks=[pt_callback])
@@ -243,7 +267,6 @@ test_predict = model.predict(y_dirty_test, batch_size=batch_size)
 print("saving")
 np.save(project_folder + f"data/processed/{data}/train_predict_{network}_{ISNR}dB" + postfix + ".npy", train_predict)
 np.save(project_folder + f"data/processed/{data}/test_predict_{network}_{ISNR}dB" + postfix + ".npy", test_predict)
-pickle.dump(history.history, open(project_folder + f"results/{data}/history_{network}_{ISNR}dB" + postfix + ".pkl", "wb"))
 
 
 y_dirty_test_robust = np.load(project_folder + "/data/intermediate/y_dirty_test_robustness.npy")

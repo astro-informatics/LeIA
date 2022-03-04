@@ -30,3 +30,11 @@ def spider_sampling(n_spokes=37, n_lenslets=24, n_wavelengths=10, normalised=Tru
     if normalised:
         uv = uv / np.max( np.abs(uv)) * np.pi /2
     return uv
+
+
+def random_sampling(samples, seed=562248):
+    """random gaussian sampling pattern with sigma=pi/3 between -pi, pi"""
+    np.random.seed(seed)
+    uv = np.random.normal(size=(int(samples*1.05),2)) * np.pi/3 # generates more samples to make sure we have enough in (-pi,pi)
+    sel = (abs(uv[:,0]) < np.pi) * (abs(uv[:,1]) < np.pi)
+    return uv[sel][:samples]
