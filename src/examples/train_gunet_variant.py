@@ -16,7 +16,7 @@ from src.sampling.uv_sampling import spider_sampling, random_sampling
 from src.callbacks import PredictionTimeCallback, TimeOutCallback, CSV_logger_plus 
 
 # model and dataset generator
-from src.networks.GUnet_variant import GUnet_variant2
+from src.networks.GUnet_variant import GUnet_variant
 from src.dataset import PregeneratedDataset, data_map
 
 # selecting one gpu to train on
@@ -85,7 +85,7 @@ else:
 
 
 
-model = GUnet_variant2(
+model = GUnet_variant(
     Nd, 
     uv=uv,
     op=op, 
