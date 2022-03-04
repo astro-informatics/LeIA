@@ -1,0 +1,28 @@
+name: Tests
+
+on: [pull_request]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.8]
+
+    steps:
+    - uses: actions/checkout@v2.3.1
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+    - uses: actions/checkout@v2.3.1
+    - name: Install package
+      run: |
+        sudo apt install pandoc
+        python -m pip install --upgrade pip    
+        python -m pip install -r requirements.txt
+    
+    - name: Run tests
+      run: |
+        pytest src/tests  
