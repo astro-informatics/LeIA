@@ -138,16 +138,16 @@ for i in tqdm.tqdm(range(start, len(x_true), pool_size)):
     diags[i:i+len(times)] = a[2]
 
     if mode == "train":
-        np.save(project_folder + f"data/processed/{data}/{operator}/PD_train_predict_{ISNR}dB.npy", predict_x)
+        np.save(project_folder + f"data/processed/{data}/{operator}/train_predict_PD_{ISNR}dB.npy", predict_x)
         np.save(project_folder + f"data/processed/{data}/{operator}/times_train_{ISNR}dB.npy", timings)
         pickle.dump(diags, open(project_folder + f"results/{data}/{operator}/diag_{ISNR}dB.npy", "wb"))
     elif mode == "test":
-        np.save(project_folder + f"data/processed/{data}/{operator}/PD_test_predict_{ISNR}dB.npy", predict_x)
+        np.save(project_folder + f"data/processed/{data}/{operator}/test_predict_PD_{ISNR}dB.npy", predict_x)
         np.save(project_folder + f"data/processed/{data}/{operator}/times_test_{ISNR}dB.npy", timings)
 
 if mode == "train":
-    np.save(project_folder + f"data/processed/{data}/{operator}/PD_train_predict_{ISNR}dB.npy", predict_x)
+    np.save(project_folder + f"data/processed/{data}/{operator}/train_predict_PD_{ISNR}dB.npy", predict_x)
     np.save(project_folder + f"data/processed/{data}/{operator}/times_train_{ISNR}dB.npy", timings)
 elif mode == "test":
-    np.save(project_folder + f"data/processed/{data}/{operator}/PD_test_predict_{ISNR}dB.npy", predict_x)
+    np.save(project_folder + f"data/processed/{data}/{operator}/test_predict_PD_{ISNR}dB.npy", predict_x)
     np.save(project_folder + f"data/processed/{data}/{operator}/times_test_{ISNR}dB.npy", timings)
