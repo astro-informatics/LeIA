@@ -1,32 +1,23 @@
-import tensorflow as tf
-import time 
-from src.operators.measurement import NUFFT_op
-from src.sampling.uv_sampling import spider_sampling
-# from scipy.io import loadmat
-from skimage import io, color
-import numpy as np
 import os
+import time 
 import glob
-from functools import partial
+
 import yogadl
 import yogadl.storage
 
-class id_op():
-    @staticmethod
-    def dir_op(x):
-        return x
-    @staticmethod
-    def adj_op(x):
-        return x
-    @staticmethod
-    def self_adj(x):
-        return x
+import numpy as np
+import tensorflow as tf
 
+from functools import partial
+from skimage import io, color
+
+from src.operators.NUFFT2D import NUFFT2D
 
 class Dataset(tf.data.Dataset):
 
     @staticmethod
     def _generator(num_samples, files=[]):
+        """yields the next image from the list of images `files`"""
         sample_idx = 0
         while True:
             filename = str(files[sample_idx])
@@ -36,16 +27,9 @@ class Dataset(tf.data.Dataset):
             if type(im[0,0]) == np.uint8: # some images are in uint for some reason
                 im = im/ 255.
             im = im[:,:, np.newaxis] # reshaping to (None, None, 1)
-            
-#             data = io.imread(files[sample_idx])
-#             data = color.rgb2gray(data)
-#             data = data[:,:, np.newaxis]
-#             data = tf.convert_to_tensor(data)
-#             data = tf.io.read_file(files[sample_idx])
-#             data = tf.io.decode_jpeg(data, channels=1)
 
             yield im
-            sample_idx = (sample_idx + 1) % 2000 # TODO remove hardcoded value
+            sample_idx = (sample_idx + 1) % len(files) 
 
     def __new__(cls, num_samples=200, data="COCO"):
 
@@ -67,13 +51,12 @@ class Dataset(tf.data.Dataset):
 
 
 def random_ellipses(nlow, nhigh):
+    """generates an image with random ellipses (between `nlow`  and `nhigh` ellipses)"""
     Nd = 256
     n = np.random.randint(nlow, nhigh)
     y,x = np.mgrid[:Nd,:Nd]
     a = np.random.uniform(0.1, 0.3, size = n).reshape(-1,1,1)*Nd
     b = np.random.uniform(0.1, 0.3, size = n).reshape(-1,1,1) *Nd
-    # x0 = np.random.uniform(0.2, 0.8, size=n).reshape(-1,1,1) *Nd
-    # y0 = np.random.uniform(0.2, 0.8, size=n).reshape(-1,1,1) *Nd
 
     r0 = np.random.uniform(0, 0.3, size=n).reshape(-1,1,1) *Nd
     phi =  np.random.uniform(0, 2*np.pi, size=n).reshape(-1,1,1)
@@ -91,7 +74,7 @@ def random_ellipses(nlow, nhigh):
     return ell /ell.max()
 
 class EllipseDataset(tf.data.Dataset):
-
+    """tensorflow dataset that yields images with random ellipses"""
     @staticmethod
     def _generator(num_samples):
         for i in range(num_samples):
@@ -107,34 +90,38 @@ class EllipseDataset(tf.data.Dataset):
 
 
 def make_yogadl_dataset(tf_dataset, storage_path="/tmp/yogadl_cache", shuffle=True):
-    """
-    Creates a dataset which can shuffle much faster than tf.dataset.shuffle"""
-    os.makedirs(storage_path, exist_ok=True)
-    lfs_config = yogadl.storage.LFSConfigurations(storage_path)
-    storage = yogadl.storage.LFSStorage(lfs_config)
+    """Creates a dataset which can shuffle much faster than tf.dataset.shuffle, 
+    if it doesn't work it returns a regular tf dataset"""
+    try:
+        os.makedirs(storage_path, exist_ok=True)
+        lfs_config = yogadl.storage.LFSConfigurations(storage_path)
+        storage = yogadl.storage.LFSStorage(lfs_config)
 
-    @storage.cacheable('coco', '1')
-    def make_data(dataset):
-        return dataset
+        @storage.cacheable('coco', '1')
+        def make_data(dataset):
+            return dataset
 
-    # Get the DataRef from the storage via the decorated function.
-    dataref = make_data(tf_dataset)
-    
-    stream = dataref.stream(
-        shuffle=shuffle,
-        shuffle_seed=42,
-    )
-    return yogadl.tensorflow.make_tf_dataset(stream)
+        # Get the DataRef from the storage via the decorated function.
+        dataref = make_data(tf_dataset)
+        
+        stream = dataref.stream(
+            shuffle=shuffle,
+            shuffle_seed=42,
+        )
+        return yogadl.tensorflow.make_tf_dataset(stream)
+    except:
+        print("Using YogaDL shuffle dataset failed, using tf shuffle instead (this will be significantly slower)")
+        return tf_dataset.shuffle(len(tf_dataset), seed=42, reshuffle_each_iteration=True)
 
 def random_crop(x):
-#     x = tf.cast(x, tf.float32)/255
+    """creates a randomly selected, randomly flipped crop of size (256,256)"""
     data = tf.image.random_crop(x, size=(256,256,1)) #TODO adapt this to be adaptable
     data = tf.image.random_flip_left_right(data)
     data = tf.image.random_flip_up_down(data)
     return data
 
 def center_crop(x):
-#     x = tf.cast(x, tf.float32)/255
+    """creates a randomly flipped crop of the center of the image with size (256,256)"""
     data = tf.squeeze(x)
     data = tf.image.resize_with_crop_or_pad(x, 256, 256)
     data = tf.image.random_flip_left_right(data)
@@ -142,78 +129,48 @@ def center_crop(x):
     return data
 
 
-def measurement(x, m_op, ISNR, data_shape, w, Nd=(256,256)):
+def measurement(x, m_op, ISNR, data_shape, Nd=(256,256)):
+    """Creates measurement from image, adds measurement noise,
+    returns measurement, true image"""
     y0 = m_op.dir_op(x.reshape(1, Nd[0], Nd[1]))
 
     sigma = np.sqrt(np.mean(np.abs(y0)**2)) * 10**(-ISNR/20)
     n = np.random.normal( 0, sigma, data_shape) + 1j * np.random.normal( 0, sigma, data_shape)
     y = y0 + n
-    
-#     x_dirty = m_op.adj_op(y*w).real
-#     fft = lambda x: tf.signal.fftshift(tf.signal.fft2d(tf.signal.fftshift(x, axes=(-2,-1))), axes=(-2,-1))
-    # fft = lambda x: np.fft.fftshift(np.fft.fft2(np.fft.fftshift(x), norm='ortho'))
-    
+
     y_dirty = y
-#     return ((x_dirty.reshape(256,256,1), y.reshape(4440,1)), x.reshape(256,256,1))
-#     print(x_dirty.shape, y_dirty.shape)
-#     return (x_dirty.reshape(256,256,1).astype(np.float32), y_dirty.reshape(4440,1).astype(np.complex128), x.reshape(256,256,1).astype(np.float32))
     return y_dirty.reshape(data_shape).astype(np.complex64), x.reshape(Nd).astype(np.float32)
 
-#     return (x_dirty, y_dirty, x)
-
-# @tf.function(input_signature=[tf.TensorSpec(None, tf.float32)])
-# def tf_function(x):
-#     return tf.numpy_function(mapping_function, [x], (tf.float32, tf.float32))
-#     # return tf.py_function(mapping_function, [x], (tf.float32, tf.float32))
 
 def measurement_func(uv, m_op = None, data_shape=None, Nd=(256,256), ISNR=30):
     """function for getting a tf function version of the measurment function"""
     if data_shape is None:
         data_shape = (len(uv),)
-    # uv = spider_sampling()
+
+    # TODO handle this operator neatly
     if m_op is None:
-        m_op = NUFFT_op() # TODO change this operator to the new one
+        m_op = NUFFT2D()
         m_op.plan(uv, (Nd[0], Nd[1]), (Nd[0]*2, Nd[1]*2), (6,6))
 
-#     grid_cell = 2*np.pi /512 
-#     binned = (uv[:,:]+np.pi+.5*grid_cell) // grid_cell
-#     binned = [tuple(x) for x in binned]
-#     cells = set(binned)
-#     w_gridded = np.zeros(uv.shape[0])
-#     for cell in list(cells):
-#         mask = np.all(np.array(cell) ==  binned, axis=1)
-#         w_gridded[mask] = np.sum(mask)
-
-#     # w = 
-#     w = 1/w_gridded
-#     w /= w.max()
-    w = 1
-    func = partial(measurement, m_op=m_op, ISNR=ISNR, data_shape=data_shape, w=w, Nd=Nd)
+    func = partial(measurement, m_op=m_op, ISNR=ISNR, data_shape=data_shape, Nd=Nd)
 
     @tf.function(input_signature=[tf.TensorSpec(None, tf.float32)])
     def tf_function(x):
-#         return tf.numpy_function(func, [x], ((tf.float32, tf.complex128), tf.float32))
-#         return tf.numpy_function(func, [x], (tf.float32, tf.complex128, tf.float32))
         return tf.numpy_function(func, [x], (tf.complex64, tf.float32))
 
     return tf_function, func
 
 @tf.function()
-def data_map(y,z, y_size=4440, z_size=(256,256)):
-    """split input and output of train data"""
-#     return {"input_1":x, "input_3":y}, z
-#     x = tf.expand_dims(x, 3)
-#     x.set_shape([None,256,256,1])
-#     y = tf.expand_dims(y, 3)
+def data_map(y, z, y_size=4440, z_size=(256,256)):
+    """sets the shape of the objects (necessary for batching)"""
     y.set_shape([None,y_size])
-#     z = tf.expand_dims(z, 3)
     z.set_shape([None,z_size[0],z_size[1]])
-#     return (x, y), z
     return y, z
 
 @tf.function()
 def data_map_image(y,z, y_size=4440, z_size=(256,256)):
-    """split input and output of train data"""
+    """sets the shape of the objects, expects image-to-image net (necessary for batching)"""
+    # TODO update this, doesn't need y_shape
     y.set_shape([None,z_size[0],z_size[1]])
     z.set_shape([None,z_size[0],z_size[1]])
     return y, z
@@ -237,6 +194,7 @@ def set_shape(x):
 
 
 class PregeneratedDataset(tf.data.Dataset):
+    """a dataset that loads pre-augmented data. """
 
     @staticmethod
     def _generator(epochs, operator="NUFFT_SPIDER"):
@@ -254,7 +212,7 @@ class PregeneratedDataset(tf.data.Dataset):
 
     def __new__(cls, operator, epochs=100):
         # assert os.path.exists(
-            # f"/data/intermediate/COCO/{operator}" ), \
+            # f"./data/intermediate/COCO/{operator}" ), \
             # f"Could not find pregenerated dataset for operator {operator}"
         return tf.data.Dataset.from_generator(
             cls._generator,

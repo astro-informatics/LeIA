@@ -65,15 +65,15 @@ for i in tqdm.tqdm(range(epochs)):
         
         folder = project_folder + f"data/intermediate/{data}/{operator}/"
         os.makedirs(folder, exist_ok=True)
-        np.save(f"{folder}/x_true_train_30dB_{i:03d}.npy",  x_data[:train_size])
-        np.save(f"{folder}/x_true_test_30dB_{i:03d}.npy",   x_data[train_size:])
-        np.save(f"{folder}/y_dirty_train_30dB_{i:03d}.npy", y_data[:train_size])
-        np.save(f"{folder}/y_dirty_test_30dB_{i:03d}.npy",  y_data[train_size:])
+        np.save(f"{folder}/x_true_train_{ISNR}dB_{i:03d}.npy",  x_data[:train_size])
+        np.save(f"{folder}/x_true_test_{ISNR}dB_{i:03d}.npy",   x_data[train_size:])
+        np.save(f"{folder}/y_dirty_train_{ISNR}dB_{i:03d}.npy", y_data[:train_size])
+        np.save(f"{folder}/y_dirty_test_{ISNR}dB_{i:03d}.npy",  y_data[train_size:])
 
-        np.save(f"{folder}/x_true_train_30dB.npy",  x_data[:train_size])
-        np.save(f"{folder}/x_true_test_30dB.npy",   x_data[train_size:])
-        np.save(f"{folder}/y_dirty_train_30dB.npy", y_data[:train_size])
-        np.save(f"{folder}/y_dirty_test_30dB.npy",  y_data[train_size:])
+        np.save(f"{folder}/x_true_train_{ISNR}dB.npy",  x_data[:train_size])
+        np.save(f"{folder}/x_true_test_{ISNR}dB.npy",   x_data[train_size:])
+        np.save(f"{folder}/y_dirty_train_{ISNR}dB.npy", y_data[:train_size])
+        np.save(f"{folder}/y_dirty_test_{ISNR}dB.npy",  y_data[train_size:])
         dataset = ds.take(train_size).cache()
     else:
         dataset2 = dataset.shuffle(train_size).map(random_crop).map(tf_func)
@@ -82,6 +82,6 @@ for i in tqdm.tqdm(range(epochs)):
         y_data = np.array([x[0] for x in array])
         x_data = np.array([x[1] for x in array])      
         
-        np.save(f"{folder}/x_true_train_30dB_{i:03d}.npy",  x_data)
-        np.save(f"{folder}/y_dirty_train_30dB_{i:03d}.npy", y_data)
+        np.save(f"{folder}/x_true_train_{ISNR}dB_{i:03d}.npy",  x_data)
+        np.save(f"{folder}/y_dirty_train_{ISNR}dB_{i:03d}.npy", y_data)
     break
