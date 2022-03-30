@@ -12,6 +12,7 @@ from functools import partial
 from skimage import io, color
 
 from src.operators.NUFFT2D import NUFFT2D
+from src.operators.NUFFT2D_TF import NUFFT2D_TF
 
 class Dataset(tf.data.Dataset):
 
@@ -151,6 +152,8 @@ def measurement_func(uv, m_op = None, data_shape=None, Nd=(256,256), ISNR=30):
     if m_op is None:
         m_op = NUFFT2D()
         m_op.plan(uv, (Nd[0], Nd[1]), (Nd[0]*2, Nd[1]*2), (6,6))
+        m_op_tf = NUFFT2D_TF()
+        m_op_tf.plan(uv, (Nd[0], Nd[1]), (Nd[0]*2, Nd[1]*2), (6,6), 20)
 
     func = partial(measurement, m_op=m_op, ISNR=ISNR, data_shape=data_shape, Nd=Nd)
 

@@ -1,5 +1,7 @@
 from functools import partial
 from tensorflow.python.framework.ops import disable_eager_execution
+
+from src.operators.NUFFT2D import NUFFT2D
 disable_eager_execution()
 
 import os
@@ -57,7 +59,7 @@ Kd = (512, 512)
 Jd = (6,6)
 
 input_type="measurements"
-
+data_op = None
 if operator == "NUFFT_SPIDER":
     uv = spider_sampling()
     y_shape = len(uv)
@@ -89,10 +91,11 @@ elif operator == "NNFFT_Random":
 elif operator == "Identity":
     y_shape = Nd
     op = IdentityOperator
+    data_op = IdentityOperator
     input_type="image"
     w = 1
     uv = None
-    ISNR=15 # more noise for image domain
+    ISNR=24 # more noise for image domain
 else:
     print("No such operator")
     exit()
@@ -104,6 +107,7 @@ model = UNet(
     uv=uv,
     op=op, 
     depth=4, 
+    conv_layers=2,
     input_type=input_type, 
     measurement_weights=w,
     batch_size=batch_size
@@ -117,11 +121,11 @@ if not load_weights:
     except:
         data_map = data_map if input_type=="measurements" else data_map_image
         print("creating dataset")
-        tf_func, func = measurement_func(uv,  m_op=op, Nd=(256,256), data_shape=y_shape, ISNR=ISNR)
+        tf_func, func = measurement_func(uv,  m_op=data_op, Nd=(256,256), data_shape=y_shape, ISNR=ISNR)
         ds = Dataset(set_size, data)
         data_map = partial(data_map, y_size=y_shape, z_size=(256,256))
         yogadl_dataset = make_yogadl_dataset(ds) # use yogadl for caching and shuffling the data
-        dataset = ds.map(random_crop).map(tf_func).batch(batch_size).map(data_map).prefetch(tf.data.experimental.AUTOTUNE)
+        dataset = yogadl_dataset.map(random_crop).map(tf_func).batch(batch_size).map(data_map).prefetch(tf.data.experimental.AUTOTUNE)
    
 
 # defining the necessary paths based on parameters
@@ -175,8 +179,13 @@ if not load_weights:
 pt_callback = PredictionTimeCallback(project_folder + f"/results/{data}/{operator}/summary_{network}{postfix}.csv", batch_size) 
 
 
-# print("Saving model history")
-# pickle.dump(history.history, open(project_folder + f"results/{data}/history_{network}_{ISNR}dB" + postfix + ".pkl", "wb"))
+print("Saving model history")
+pickle.dump(history.history, open(project_folder + f"results/{data}/history_{network}_{ISNR}dB" + postfix + ".pkl", "wb"))
+#TODO add robustness test to this
+y_dirty_robustness = np.load(data_folder+ f"y_dirty_test_{ISNR}dB_robustness.npy").reshape(-1,y_shape)
+robustness_predict = model.predict(y_dirty_robustness, batch_size=batch_size, callbacks=[pt_callback])
+np.save(project_folder + f"data/processed/{data}/{operator}/test_predict_{network}_{ISNR}dB" + postfix + "_robustness.npy", robustness_predict)
+
 
 print("loading train and test data")
 x_true = np.load(data_folder+ f"x_true_train_{ISNR}dB.npy").reshape(-1,256,256)
@@ -196,7 +205,6 @@ os.makedirs(project_folder + f"data/processed/{data}/{operator}", exist_ok=True)
 np.save(project_folder + f"data/processed/{data}/{operator}/train_predict_{network}_{ISNR}dB" + postfix + ".npy", train_predict)
 np.save(project_folder + f"data/processed/{data}/{operator}/test_predict_{network}_{ISNR}dB" + postfix + ".npy", test_predict)
 
-#TODO add robustness test to this
 
 import pandas as pd
 from skimage.metrics import structural_similarity, peak_signal_noise_ratio, mean_squared_error
@@ -225,4 +233,4 @@ print("saving results")
 with pd.option_context('mode.use_inf_as_na', True):
     statistics.dropna(inplace=True)
 
-statistics.to_csv(project_folder + f"results/{data}/{operator}/statistics_{network}{postfix}.csv")
+statistics.to_csv(project_folder + f"results/{data}/{operator}/statistics_{network}_{ISNR}dB{postfix}.csv")

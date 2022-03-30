@@ -59,12 +59,27 @@ class GUnet(tf.keras.Model):
         kernel_size=3, 
         output_activation='linear', 
         input_type="measurements",
+        residual = True,
         batch_size=20
         ):
 
+        # store parameters
+        self.image_shape = image_shape
+        self.uv = uv
+        self.depth = depth
+        self.start_filters = start_filters
+        self.measurement_weights = measurement_weights
+        self.conv_layers = conv_layers
+        self.kernel_size = kernel_size 
+        self.output_activation = output_activation
+        self.input_type = input_type
+        self.batch_size = batch_size
+        self.op = op
+        self.residual = residual
+
         assert not tf.executing_eagerly(), "GUNet cannot be run in eager execution mode, make sure to disable eager execution using `tf.compat.v1.disable_eager_execution()`"
-        if measurement_weights is None:
-            measurement_weights = np.ones(len(uv))
+        if self.measurement_weights is None:
+            self.measurement_weights = np.ones(len(uv))
 
         Nd = (image_shape[0], image_shape[1])
         Kd = (Nd[0]*2, Nd[1]*2)
@@ -72,12 +87,12 @@ class GUnet(tf.keras.Model):
 
         ops = [] # list with measurement operators for each scale
         low_freq_sels = [] # list with frequency measurements for each scale
-        freq_weights = [measurement_weights]  # list with weights for each scale
+        freq_weights = [self.measurement_weights]  # list with weights for each scale
         grad_layers = []
         subsampled_inputs = []
 
         for i in range(depth+1):
-            m_op = op() # TF native operator
+            m_op = self.op() # TF native operator
             nd, kd = (Nd[0]//2**i, Nd[1]//2**i), (Kd[0]//2**i, Kd[1]//2**i)
             sel =  np.all(uv <  np.pi / 2**i, axis=1) # square selection (with exclusion region outside)
 
@@ -100,7 +115,7 @@ class GUnet(tf.keras.Model):
         elif input_type == "measurements":
             assert op is not None, "Operator needs to be specified when passing measurements as input" 
             inputs = tf.keras.Input([ops[0].n_measurements], dtype=tf.complex64)
-            x = tf.math.real(ops[0].adj_op(inputs * measurement_weights))
+            x = tf.math.real(ops[0].adj_op(inputs * freq_weights[0]))
         else:
             raise ValueError("argument input_type should be one of ['image', 'measurements']")
 
@@ -184,7 +199,13 @@ class GUnet(tf.keras.Model):
                     activation=output_activation,
                     name="conv2d_output"
                     )(x)
-        outputs = tf.squeeze(x, axis=-1) + x_init # remove extra dimension and add initial reconstruction
+
+        # remove extra dimension and add initial reconstruction
+        if self.residual:
+            outputs = tf.squeeze(x, axis=-1) + x_init 
+        else:
+            outputs = tf.squeeze(x, axis=-1)
+
 
         super().__init__(inputs=[inputs], outputs=outputs)
         print(inputs, outputs)
@@ -205,8 +226,43 @@ class GUnet(tf.keras.Model):
         with tf.name_scope("grad_" + str(i)):
             filtered_grad = grad_layers[i](x_[:,:,:,0], y, measurement_weights=freq_weights)
             # if the weights are not uniform, add a non-weighted gradient
-            if np.all(freq_weights != np.ones(len(freq_weights))):
+            if np.any(freq_weights != np.ones(len(freq_weights))):
                 grad = grad_layers[i](x_[:,:,:,0], y, measurement_weights=1)
                 return tf.stack([x_[:,:,:,0], grad, filtered_grad], axis=3)
             else: 
                 return tf.stack([x_[:,:,:,0], filtered_grad], axis=3)
+
+    def rebuild_with_op(self, uv):
+        """Rebuilds the current network with a new sampling distribution
+
+        Args:
+            uv : new sampling distribution
+
+        Returns:
+            model : model rebuild with new sampling distribution
+        """
+        # extract weights from current model
+        weigths = [self.layers[i].get_weights() for i in range(len(self.layers))]
+
+        # reset graph and make new model with same parameters but new sampling distribution
+        tf.keras.backend.clear_session()
+        model = GUnet(
+            self.image_shape, 
+            uv,
+            op=self.op, 
+            depth=self.depth, 
+            start_filters=self.start_filters,
+            conv_layers=self.conv_layers, 
+            kernel_size=self.kernel_size, 
+            output_activation=self.output_activation, 
+            input_type=self.input_type, 
+            measurement_weights=self.measurement_weights,
+            batch_size=self.batch_size,
+            residual=self.residual
+        )
+        
+        # transfer old weights to new model
+        for i in range(len(self.layers)):
+            model.layers[i].set_weights(weigths[i])
+        
+        return model

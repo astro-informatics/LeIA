@@ -18,8 +18,14 @@ class PseudoInverse(tf.keras.Model):
 
 
         inputs = tf.keras.Input([m_op.n_measurements], dtype=tf.complex64)
-        outputs = tf.math.real(m_op.adj_op(inputs * measurement_weights))
+        x = tf.math.real(m_op.adj_op(inputs * measurement_weights))
 
+
+        tmp_max = tf.math.reduce_max(x, axis=(1,2))[:,None, None]
+        tmp_min = tf.math.reduce_min(x, axis=(1,2))[:,None, None]
+
+        # x = (x - tmp_min)/(tmp_max - tmp_min)
+        outputs = x
         super().__init__(inputs=[inputs], outputs=outputs)
         self.compile(optimizer='adam', loss= tf.keras.losses.MSE)
 

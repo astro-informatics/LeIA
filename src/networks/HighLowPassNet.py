@@ -104,18 +104,33 @@ class Gradient(tf.keras.layers.Layer):
 
 class HighLowPassNet(tf.keras.Model):
     def __init__(self, 
-        input_shape, 
+        image_shape, 
         uv, 
         op=None,
         depth=2, 
-        start_filters=16, 
+        start_filters=16,
         conv_layers=1, 
+        measurement_weights=None,
         kernel_size=3, 
-        conv_activation='relu', 
         output_activation='linear', 
-        measurement_weights=None
+        input_type="image",
+        residual = True,
+        batch_size=20
         ):
 
+        # store parameters
+        self.image_shape = image_shape
+        self.uv = uv
+        self.depth = depth
+        self.start_filters = start_filters
+        self.measurement_weights = measurement_weights
+        self.conv_layers = conv_layers
+        self.kernel_size = kernel_size 
+        self.output_activation = output_activation
+        self.input_type = input_type
+        self.batch_size = batch_size
+        self.residual = residual
+        self.op = op
         assert not tf.executing_eagerly(), "HighLowPassNet cannot be run in eager execution mode, make sure to disable eager execution using `tf.compat.v1.disable_eager_execution()`"
 
         batch_size = 20
@@ -127,7 +142,7 @@ class HighLowPassNet(tf.keras.Model):
             measurement_weights = np.ones(len(uv))
         x = inputs
 
-        Nd = (input_shape[0], input_shape[1])
+        Nd = (image_shape[0], image_shape[1])
         Kd = (Nd[0]*2, Nd[1]*2)
         Jd = (6,6)
 
@@ -139,7 +154,7 @@ class HighLowPassNet(tf.keras.Model):
 
         new_uv = uv
         for i in range(depth+1):
-            m_op = op() # TF native operator
+            m_op = self.op() # TF native operator
             nd, kd = (Nd[0]//2**i, Nd[1]//2**i), (Kd[0]//2**i, Kd[1]//2**i)
             sel =  np.all(new_uv <  np.pi / 2**i, axis=1) # square selection (with exclusion region outside)
 
@@ -155,7 +170,7 @@ class HighLowPassNet(tf.keras.Model):
         freq_weights = freq_weights[1:]
 
         
-        x_init = tf.math.real(ops[0].adj_op(x_ * freq_weights[0])) # initial reconstructions
+        x_init = tf.math.real(ops[0].adj_op(x_ * measurement_weights)) # initial reconstructions
         
         # calculate down and upscale layers
         down_layers = []
@@ -220,6 +235,40 @@ class HighLowPassNet(tf.keras.Model):
         super().__init__(inputs=[inputs], outputs=outputs)
 
         self.compile(optimizer='adam', loss= tf.keras.losses.MSE)
+
+    def rebuild_with_op(self, uv):
+        """Rebuilds the current network with a new sampling distribution
+
+        Args:
+            uv : new sampling distribution
+
+        Returns:
+            model : model rebuild with new sampling distribution
+        """
+        # extract weights from current model
+        weigths = [self.layers[i].get_weights() for i in range(len(self.layers))]
+
+        # reset graph and make new model with same parameters but new sampling distribution
+        tf.keras.backend.clear_session()
+        model = HighLowPassNet(
+            self.image_shape, 
+            uv,
+            op=self.op, 
+            depth=self.depth, 
+            start_filters=self.start_filters,
+            conv_layers=self.conv_layers, 
+            kernel_size=self.kernel_size, 
+            output_activation=self.output_activation, 
+            input_type=self.input_type, 
+            measurement_weights=self.measurement_weights,
+            batch_size=self.batch_size
+        )
+        
+        # transfer old weights to new model
+        for i in range(len(self.layers)):
+            model.layers[i].set_weights(weigths[i])
+        
+        return model
 
 def grad_block(x_, grad_layers, freq_info, i, freq_weights=1):
     with tf.name_scope("grad_" + str(i)):
