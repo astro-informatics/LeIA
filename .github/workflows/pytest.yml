@@ -25,3 +25,4 @@ jobs:
     - name: Run tests
       run: |
         pytest src/tests  
+        pytest src/tests_graph_mode
