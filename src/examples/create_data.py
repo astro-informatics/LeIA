@@ -35,40 +35,41 @@ Jd = (6,6)
 batch_size = 1
 if operator == "NUFFT_SPIDER":
     uv = spider_sampling()
+    uv_original = uv
     y_shape = len(uv)
     m_op = NUFFT2D()
     m_op.plan(uv, Nd, Kd, Jd, batch_size=batch_size)
+    m_op_original = m_op
 elif operator == "NUFFT_Random":
     y_shape = int(Nd[0]**2/2)
     uv = random_sampling(y_shape)
-    m_op = NUFFT2D()
-    m_op.plan(uv, Nd, Kd, Jd, batch_size=batch_size)
+    uv_original = random_sampling(y_shape)
+    m_op_original = NUFFT2D()
+    m_op_original.plan(uv, Nd, Kd, Jd, batch_size=batch_size)
 elif operator == "NNFFT_Random":
     y_shape = int(Nd[0]**2/2)
     uv = random_sampling(y_shape)
     m_op = NNFFT2D()
     m_op.plan(uv, Nd, Kd, Jd, batch_size=batch_size)
 
-tf_func, func = measurement_func(uv,  m_op=m_op, Nd=Nd, ISNR=ISNR)
+tf_func_original, func = measurement_func(uv,  m_op=None, Nd=Nd, ISNR=ISNR)
 
 np.random.seed(8394829)
 tf.random.set_seed(8394829)
 
 ds = Dataset(train_size + test_size, data)
+uvs = []
+for i in tqdm.tqdm(range(epochs+1)):
 
-for i in tqdm.tqdm(range(epochs)):
+
     if i == 0:
-        dataset = ds.take(train_size + test_size).map(random_crop).map(tf_func)
+        dataset = ds.take(train_size + test_size).map(random_crop).map(tf_func_original)
         array = list(dataset.as_numpy_iterator())
         y_data = np.array([x[0] for x in array])
         x_data = np.array([x[1] for x in array])
         
-        folder = project_folder + f"data/intermediate/{data}/{operator}/"
+        folder = project_folder + f"data/intermediate/{data}/{operator}_var/"
         os.makedirs(folder, exist_ok=True)
-        np.save(f"{folder}/x_true_train_{ISNR}dB_{i:03d}.npy",  x_data[:train_size])
-        np.save(f"{folder}/x_true_test_{ISNR}dB_{i:03d}.npy",   x_data[train_size:])
-        np.save(f"{folder}/y_dirty_train_{ISNR}dB_{i:03d}.npy", y_data[:train_size])
-        np.save(f"{folder}/y_dirty_test_{ISNR}dB_{i:03d}.npy",  y_data[train_size:])
 
         np.save(f"{folder}/x_true_train_{ISNR}dB.npy",  x_data[:train_size])
         np.save(f"{folder}/x_true_test_{ISNR}dB.npy",   x_data[train_size:])
@@ -76,12 +77,43 @@ for i in tqdm.tqdm(range(epochs)):
         np.save(f"{folder}/y_dirty_test_{ISNR}dB.npy",  y_data[train_size:])
         dataset = ds.take(train_size).cache()
     else:
+        uv = random_sampling(y_shape, int(np.random.uniform(0, int(2**32-1))))
+        uvs.append(uv)
+        m_op = NUFFT2D()
+        m_op.plan(uv, Nd, Kd, Jd, batch_size=batch_size)
+
+        tf_func, func = measurement_func(uv,  m_op=None, Nd=Nd, ISNR=ISNR)
+
         dataset2 = dataset.shuffle(train_size).map(random_crop).map(tf_func)
         array = list(dataset2.as_numpy_iterator())
 
         y_data = np.array([x[0] for x in array])
         x_data = np.array([x[1] for x in array])      
         
-        np.save(f"{folder}/x_true_train_{ISNR}dB_{i:03d}.npy",  x_data)
-        np.save(f"{folder}/y_dirty_train_{ISNR}dB_{i:03d}.npy", y_data)
-    break
+        np.save(f"{folder}/x_true_train_{ISNR}dB_{i-1:03d}.npy",  x_data)
+        np.save(f"{folder}/y_dirty_train_{ISNR}dB_{i-1:03d}.npy", y_data)
+
+    # break
+np.save("./uvs.npy", uvs)
+
+
+# set with varying ISNR
+x_robustness = []
+y_robustness = []
+dataset = ds.take(train_size+100).cache()
+folder = project_folder + f"data/intermediate/{data}/{operator}/"
+
+for isnr in tqdm.tqdm(np.arange(30, 5,-2.5)):
+    tf_func, func = measurement_func(uv_original,  m_op=m_op_original, Nd=Nd, ISNR=isnr)
+
+    dataset2 = dataset.skip(2000).take(100).map(random_crop).map(tf_func)
+    array = list(dataset2.as_numpy_iterator())
+
+    y_data = np.array([x[0] for x in array])
+    x_data = np.array([x[1] for x in array])
+
+    y_robustness.append(y_data)
+    x_robustness.append(x_data)
+
+np.save(f"{folder}/x_true_test_{ISNR}dB_robustness.npy",  np.array(x_robustness).reshape(-1, 256,256))
+np.save(f"{folder}/y_dirty_test_{ISNR}dB_robustness.npy",  np.array(y_robustness).reshape(-1, m_op_original.n_measurements))

@@ -152,9 +152,13 @@ if not load_weights:
 # for saving how long predictions take
 pt_callback = PredictionTimeCallback(project_folder + f"/results/{data}/{operator}/summary_{network}{postfix}.csv", batch_size) 
 
+#TODO add robustness test to this
+y_dirty_robustness = np.load(data_folder+ f"y_dirty_test_{ISNR}dB_robustness.npy").reshape(-1,y_shape)
+robustness_predict = model.predict(y_dirty_robustness, batch_size=batch_size, callbacks=[pt_callback])
+np.save(project_folder + f"data/processed/{data}/{operator}/test_predict_{network}_{ISNR}dB" + postfix + "_robustness.npy", robustness_predict)
 
-# print("Saving model history")
-# pickle.dump(history.history, open(project_folder + f"results/{data}/history_{network}_{ISNR}dB" + postfix + ".pkl", "wb"))
+print("Saving model history")
+pickle.dump(history.history, open(project_folder + f"results/{data}/history_{network}_{ISNR}dB" + postfix + ".pkl", "wb"))
 
 print("loading train and test data")
 x_true = np.load(data_folder+ f"x_true_train_{ISNR}dB.npy").reshape(-1,256,256)

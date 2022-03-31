@@ -143,7 +143,7 @@ if not load_weights:
         steps_per_epoch=set_size//batch_size
     )
 
-exit()
+# exit()
 
 
 # for saving how long predictions take
