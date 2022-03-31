@@ -133,7 +133,6 @@ class HighLowPassNet(tf.keras.Model):
         self.op = op
         assert not tf.executing_eagerly(), "HighLowPassNet cannot be run in eager execution mode, make sure to disable eager execution using `tf.compat.v1.disable_eager_execution()`"
 
-        batch_size = 20
         self.is_adapted=False
         # inputs = tf.keras.Input(input_shape)
         inputs = tf.keras.Input([len(uv)], dtype=tf.complex64) # individual measurements
@@ -189,7 +188,7 @@ class HighLowPassNet(tf.keras.Model):
                 shape_x=(Nd[0]//2**(i+1), 
                 Nd[1]//2**(i+1)), 
                 depth=i, 
-                batch_size=20,
+                batch_size=self.batch_size,
                 )
 
             down_layers.append(ds)

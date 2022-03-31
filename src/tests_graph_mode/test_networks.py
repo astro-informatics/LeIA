@@ -48,7 +48,7 @@ def network_test(network, x, y):
     model = model.rebuild_with_op(new_uv)
     model.fit(y, x)
 
-     # TODO add tests that assert the right input and output shapes
+    # TODO add tests that assert the right input and output shapes
     # TODO add tests that check shapes of measurement weights not being the same
     # TODO add test for the rebuild with op function
 
