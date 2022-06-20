@@ -224,13 +224,13 @@ class GUnet(tf.keras.Model):
     @staticmethod
     def _grad_block(x_, grad_layers, y, i, freq_weights=1):
         with tf.name_scope("grad_" + str(i)):
-            filtered_grad = grad_layers[i](x_[:,:,:,0], y, measurement_weights=freq_weights)
+            filtered_grad = tf.expand_dims(grad_layers[i](x_[:,:,:,0], y, measurement_weights=freq_weights), axis=3)
             # if the weights are not uniform, add a non-weighted gradient
             if np.any(freq_weights != np.ones(len(freq_weights))):
-                grad = grad_layers[i](x_[:,:,:,0], y, measurement_weights=1)
-                return tf.stack([x_[:,:,:,0], grad, filtered_grad], axis=3)
+                grad = tf.expand_dims(grad_layers[i](x_[:,:,:,0], y, measurement_weights=1), axis=3)
+                return tf.concat([x_[:,:,:,:], grad, filtered_grad], axis=3)
             else: 
-                return tf.stack([x_[:,:,:,0], filtered_grad], axis=3)
+                return tf.concat([x_[:,:,:,:], filtered_grad], axis=3)
 
     def rebuild_with_op(self, uv):
         """Rebuilds the current network with a new sampling distribution

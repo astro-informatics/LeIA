@@ -40,6 +40,8 @@ def compare(images, ncols=None, nrows=None, titles=None, same_scale=False, color
     vmin, vmax = a.get_clim()
     for i in range(0, nrows):
         for j in range(ncols):
+            if i +j*nrows >= len(images):
+                break
             if same_scale:
                 im = ax[i,j].imshow(images[j + i*ncols], 
                     **imshow_kwargs, vmin=vmin, vmax=vmax, cmap=cmap)
@@ -47,8 +49,7 @@ def compare(images, ncols=None, nrows=None, titles=None, same_scale=False, color
                 im = ax[i,j].imshow(images[j + i*ncols], cmap=cmap, **imshow_kwargs)
             ax[i,j].set_title(titles[j + i*ncols])
 
-            if i +j*nrows >= len(images):
-                break
+  
             if colorbar:
                 plt.colorbar(im, ax=ax[i,j], fraction=0.046, pad=0.04)
             ax[i,j].set_xticks([])

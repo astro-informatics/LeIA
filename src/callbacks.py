@@ -60,7 +60,7 @@ class PredictionTimeCallback(tf.keras.callbacks.Callback):
         non_trainable_count = self.count_params(self.model.non_trainable_weights)
 
         self.timings = np.array(self.end_timings) - np.array(self.begin_timings)
-        self.csv_file.write("Mean time,{}\n".format(np.mean(self.timings/self.batch_size)))
+        self.csv_file.write("Mean time,{}\n".format(np.median(self.timings/self.batch_size)))
         self.csv_file.write("Std time,{}\n".format(np.std(self.timings/self.batch_size)))
         self.csv_file.write('Total params,{}\n'.format(trainable_count + non_trainable_count))
         self.csv_file.write('Trainable params,{}\n'.format(trainable_count))

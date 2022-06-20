@@ -22,7 +22,7 @@ from src.operators.dictionary import wavelet_basis
 
 ISNR = 30 #int(sys.argv[1])
 mode = sys.argv[1] # train or test
-data = "COCO" #sys.argv[3]
+data = "TNG" #sys.argv[3]
 operator = sys.argv[2]
 project_folder = os.environ["HOME"] +"/src_aiai/"
 # ISNR = 50
@@ -59,7 +59,7 @@ if mode == "train":
     y_dirty = np.load(project_folder +f"data/intermediate/{data}/{operator}/y_dirty_train_{ISNR}dB.npy")
     # noise_val = np.load(project_folder +f"data/intermediate/{data}/noise_levels_train_{ISNR}dB.npy")
     try:
-        predict_x = np.load(project_folder + f"data/processed/{data}/{operator}/PD_train_predict_{ISNR}dB.npy")
+        predict_x = np.load(project_folder + f"data/processed/{data}/{operator}/train_predict_PD_{ISNR}dB.npy")
         timings = np.load(project_folder + f"data/processed/{data}/{operator}/times_train_{ISNR}dB.npy")
         diags = pickle.load(open(project_folder + f"results/{data}/{operator}/diag_{ISNR}dB.npy", "rb"))
     except:
@@ -75,7 +75,7 @@ elif mode == "test":
     # noise_val = np.load(project_folder +f"data/intermediate/{data}/noise_levels_test_{ISNR}dB.npy")
     #predict_x = np.zeros_like(x_true)
     try:
-        predict_x = np.load(project_folder + f"data/processed/{data}/{operator}/PD_test_predict_{ISNR}dB.npy")
+        predict_x = np.load(project_folder + f"data/processed/{data}/{operator}/test_predict_PD_{ISNR}dB.npy")
         timings = np.load(project_folder + f"data/processed/{data}/{operator}/times_test_{ISNR}dB.npy")
     except:
         predict_x = np.zeros_like(x_true)
@@ -120,7 +120,12 @@ start = np.where( np.sum(predict_x, axis=(1,2)) == 0 )[0][0]
 os.makedirs(project_folder + f"data/processed/{data}/{operator}/", exist_ok=True)
 os.makedirs(project_folder + f"results/{data}/{operator}", exist_ok=True)
 
-noise_val = 0.01 # calculated from train set 
+if data == "COCO":
+    noise_val = 0.05 # calculated from train set 
+elif data == "SATS":
+    noise_val = 0.04 # calculated from train set 
+elif data == "TNG":
+    noise_val = 0.02 # calculated from train set 
 pool_size = 100
 
 # solvers = [copy.deepcopy(solver) for i in range(pool_size)]

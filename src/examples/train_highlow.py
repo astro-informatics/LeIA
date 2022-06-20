@@ -21,7 +21,7 @@ from src.callbacks import PredictionTimeCallback, TimeOutCallback, CSV_logger_pl
 
 # model and dataset generator
 # from src.networks.UNet import Unet
-from src.networks.HighLowPassNet import HighLowPassNet
+from src.networks.HighLowPassNet_variant2 import HighLowPassNet
 
 from src.dataset import PregeneratedDataset, data_map
 
@@ -39,7 +39,7 @@ max_train_time = 40*60 # time after which training should stop in mins
 
 
 ISNR = 30 #dB
-network = "highlow"
+network = "highlow_variant_new"
 activation = "linear"
 load_weights = bool(int(sys.argv[1])) # continuing the last run
 operator = str(sys.argv[2])
@@ -153,11 +153,11 @@ if not load_weights:
 pt_callback = PredictionTimeCallback(project_folder + f"/results/{data}/{operator}/summary_{network}{postfix}.csv", batch_size) 
 #TODO add robustness test to this
 y_dirty_robustness = np.load(data_folder+ f"y_dirty_test_{ISNR}dB_robustness.npy").reshape(-1,y_shape)
-robustness_predict = model.predict(y_dirty_robustness, batch_size=batch_size, callbacks=[pt_callback])
+robustness_predict = model.predict(y_dirty_robustness, batch_size=batch_size)
 np.save(project_folder + f"data/processed/{data}/{operator}/test_predict_{network}_{ISNR}dB" + postfix + "_robustness.npy", robustness_predict)
 
 print("Saving model history")
-pickle.dump(history.history, open(project_folder + f"results/{data}/history_{network}_{ISNR}dB" + postfix + ".pkl", "wb"))
+# pickle.dump(history.history, open(project_folder + f"results/{data}/history_{network}_{ISNR}dB" + postfix + ".pkl", "wb"))
 
 print("loading train and test data")
 x_true = np.load(data_folder+ f"/x_true_train_{ISNR}dB.npy").reshape(-1,256,256)
@@ -205,4 +205,4 @@ print("saving results")
 with pd.option_context('mode.use_inf_as_na', True):
     statistics.dropna(inplace=True)
 
-statistics.to_csv(project_folder + f"results/{data}/{operator}/statistics_{network}{postfix}.csv")
+statistics.to_csv(project_folder + f"results/{data}/{operator}/statistics_{network}_{ISNR}dB{postfix}.csv")

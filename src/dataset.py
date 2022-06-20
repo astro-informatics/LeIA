@@ -137,7 +137,7 @@ def measurement(x, m_op, ISNR, data_shape, Nd=(256,256)):
 
     sigma = np.sqrt(np.mean(np.abs(y0)**2)) * 10**(-ISNR/20)
     n = np.random.normal( 0, sigma, data_shape) + 1j * np.random.normal( 0, sigma, data_shape)
-    y = y0 + n
+    y = y0 + n/np.sqrt(2) # correct for the complex amplitude of noise
 
     y_dirty = y
     return y_dirty.reshape(data_shape).astype(np.complex64), x.reshape(Nd).astype(np.float32)
@@ -200,25 +200,25 @@ class PregeneratedDataset(tf.data.Dataset):
     """a dataset that loads pre-augmented data. """
 
     @staticmethod
-    def _generator(epochs, operator="NUFFT_SPIDER"):
+    def _generator(epochs, operator="NUFFT_SPIDER", ISNR=30):
         i = 0
         try:
             operator = operator.decode('utf-8')
         except:
             pass
         while True:
-            x = np.load(f"./data/intermediate/COCO/{operator}/x_true_train_30dB_{i:03d}.npy")
-            y = np.load(f"./data/intermediate/COCO/{operator}/y_dirty_train_30dB_{i:03d}.npy")
+            x = np.load(f"./data/intermediate/COCO/{operator}/x_true_train_{ISNR}dB_{i:03d}.npy")
+            y = np.load(f"./data/intermediate/COCO/{operator}/y_dirty_train_{ISNR}dB_{i:03d}.npy")
 
             yield y, x
             i = (i + 1) % 100 # only a 100 presaved so reuse them
 
-    def __new__(cls, operator, epochs=100):
+    def __new__(cls, operator, ISNR=30, epochs=100):
         # assert os.path.exists(
             # f"./data/intermediate/COCO/{operator}" ), \
             # f"Could not find pregenerated dataset for operator {operator}"
         return tf.data.Dataset.from_generator(
             cls._generator,
             output_types=(tf.complex64, tf.float32),
-            args=(epochs, operator)
+            args=(epochs, operator, ISNR)
         )

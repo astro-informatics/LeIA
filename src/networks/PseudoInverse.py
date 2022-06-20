@@ -10,7 +10,8 @@ class PseudoInverse(tf.keras.Model):
         uv, 
         op,
         measurement_weights=1,
-        batch_size=20
+        batch_size=20,
+        **kwargs,
         ):
 
         m_op = op()
@@ -24,7 +25,7 @@ class PseudoInverse(tf.keras.Model):
         tmp_max = tf.math.reduce_max(x, axis=(1,2))[:,None, None]
         tmp_min = tf.math.reduce_min(x, axis=(1,2))[:,None, None]
 
-        # x = (x - tmp_min)/(tmp_max - tmp_min)
+        x = (x - tmp_min)/(tmp_max - tmp_min)
         outputs = x
         super().__init__(inputs=[inputs], outputs=outputs)
         self.compile(optimizer='adam', loss= tf.keras.losses.MSE)

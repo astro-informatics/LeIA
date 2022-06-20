@@ -158,4 +158,4 @@ print("saving results")
 with pd.option_context('mode.use_inf_as_na', True):
     statistics.dropna(inplace=True)
 
-statistics.to_csv(project_folder + f"results/{data}/{operator}/statistics_{network}{postfix}.csv")
+statistics.to_csv(project_folder + f"results/{data}/{operator}/statistics_{network}_{ISNR}dB{postfix}.csv")

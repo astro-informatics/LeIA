@@ -19,11 +19,11 @@ Nd = (256, 256)
 ISNR = 30 #dB
 
 epochs = 100
-train_size = 2000
-test_size = 1000
+train_size = 300
+test_size = 150
 
-data = 'COCO'
-
+data = 'TNG'
+random = False
 operator = sys.argv[1]
 project_folder = os.environ["HOME"] +"/src_aiai/"
 
@@ -53,7 +53,11 @@ elif operator == "NNFFT_Random":
     m_op.plan(uv, Nd, Kd, Jd, batch_size=batch_size)
 
 tf_func_original, func = measurement_func(uv,  m_op=None, Nd=Nd, ISNR=ISNR)
+tf_func = tf_func_original
 
+if random:
+    operator += "_var"
+    
 np.random.seed(8394829)
 tf.random.set_seed(8394829)
 
@@ -68,7 +72,7 @@ for i in tqdm.tqdm(range(epochs+1)):
         y_data = np.array([x[0] for x in array])
         x_data = np.array([x[1] for x in array])
         
-        folder = project_folder + f"data/intermediate/{data}/{operator}_var/"
+        folder = project_folder + f"data/intermediate/{data}/{operator}/"
         os.makedirs(folder, exist_ok=True)
 
         np.save(f"{folder}/x_true_train_{ISNR}dB.npy",  x_data[:train_size])
@@ -77,12 +81,13 @@ for i in tqdm.tqdm(range(epochs+1)):
         np.save(f"{folder}/y_dirty_test_{ISNR}dB.npy",  y_data[train_size:])
         dataset = ds.take(train_size).cache()
     else:
-        uv = random_sampling(y_shape, int(np.random.uniform(0, int(2**32-1))))
-        uvs.append(uv)
-        m_op = NUFFT2D()
-        m_op.plan(uv, Nd, Kd, Jd, batch_size=batch_size)
+        if random:
+            uv = random_sampling(y_shape, int(np.random.uniform(0, int(2**32-1))))
+            uvs.append(uv)
+            m_op = NUFFT2D()
+            m_op.plan(uv, Nd, Kd, Jd, batch_size=batch_size)
 
-        tf_func, func = measurement_func(uv,  m_op=None, Nd=Nd, ISNR=ISNR)
+            tf_func, func = measurement_func(uv,  m_op=None, Nd=Nd, ISNR=ISNR)
 
         dataset2 = dataset.shuffle(train_size).map(random_crop).map(tf_func)
         array = list(dataset2.as_numpy_iterator())
@@ -93,8 +98,11 @@ for i in tqdm.tqdm(range(epochs+1)):
         np.save(f"{folder}/x_true_train_{ISNR}dB_{i-1:03d}.npy",  x_data)
         np.save(f"{folder}/y_dirty_train_{ISNR}dB_{i-1:03d}.npy", y_data)
 
-    # break
-np.save("./uvs.npy", uvs)
+    break
+exit()
+
+if random: 
+    np.save("./uvs.npy", uvs)
 
 
 # set with varying ISNR

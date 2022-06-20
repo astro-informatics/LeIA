@@ -110,7 +110,8 @@ model = UNet(
     conv_layers=2,
     input_type=input_type, 
     measurement_weights=w,
-    batch_size=batch_size
+    batch_size=batch_size,
+    residual=True
     )
 
 if not load_weights:
@@ -180,10 +181,10 @@ pt_callback = PredictionTimeCallback(project_folder + f"/results/{data}/{operato
 
 
 print("Saving model history")
-pickle.dump(history.history, open(project_folder + f"results/{data}/history_{network}_{ISNR}dB" + postfix + ".pkl", "wb"))
+# pickle.dump(history.history, open(project_folder + f"results/{data}/history_{network}_{ISNR}dB" + postfix + ".pkl", "wb"))
 #TODO add robustness test to this
 y_dirty_robustness = np.load(data_folder+ f"y_dirty_test_{ISNR}dB_robustness.npy").reshape(-1,y_shape)
-robustness_predict = model.predict(y_dirty_robustness, batch_size=batch_size, callbacks=[pt_callback])
+robustness_predict = model.predict(y_dirty_robustness, batch_size=batch_size)
 np.save(project_folder + f"data/processed/{data}/{operator}/test_predict_{network}_{ISNR}dB" + postfix + "_robustness.npy", robustness_predict)
 
 
