@@ -8,7 +8,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras import callbacks
 
-tf.compat.v1.disable_eager_execution() # GUNet cannot use eager execution
+# tf.compat.v1.disable_eager_execution() # GUNet cannot use eager execution
 
 
 # operators and sampling patterns
@@ -81,7 +81,7 @@ def predict(x_true, y_dirty, x_true_test, y_dirty_test, model, batch_size, data,
     statistics.to_csv(f"./results/{data}/{operator}/statistics_{network}_{ISNR}dB{postfix}.csv")
 #TODO add a nice argument parser
 
-epochs = 50
+epochs = 100
 set_size = 2000 # size of the train set
 save_freq = 20 # save every 20 epochs
 batch_size = 20 
@@ -100,7 +100,7 @@ except:
     postfix = ""
 
 
-data = "TNG"
+data = "SATS"
 
 # creating the operator
 Nd = (256, 256)
@@ -264,15 +264,15 @@ print("start first model")
 postfix = f"_{data}"
 callbacks = create_callbacks(data, operator, network, ISNR, postfix)
 
-# history = model.fit(
-#     dataset,
-#     epochs=epochs, 
-#     callbacks=callbacks,
-#     steps_per_epoch=set_size//batch_size
-# )
+history = model.fit(
+    dataset,
+    epochs=epochs, 
+    callbacks=callbacks,
+    steps_per_epoch=set_size//batch_size
+)
 
-# # predict using this model
-# predict(x_train, y_train, x_test, y_test, model, batch_size, data, ISNR, postfix=postfix)
+# predict using this model
+predict(x_train, y_train, x_test, y_test, model, batch_size, data, ISNR, postfix=postfix)
 
 
 ###### transfer predict w/o training ########
