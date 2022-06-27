@@ -144,14 +144,15 @@ class GUnet(tf.keras.Model):
             "padding": "same",
             }
 
-        x = self._grad_block(x, grad_layers, subsampled_inputs[0], 0, freq_weights[0]) # calculate and concatenate gradients
+        # x = self._grad_block(x, grad_layers, subsampled_inputs[0], 0, freq_weights[0]) # calculate and concatenate gradients
         x = tf.keras.layers.Conv2D(filters=start_filters, **conv_kwargs)(x)
         x = tf.keras.layers.BatchNormalization()(x)
 
         # convolution downward
         for i in range(depth):
             if i != 0:
-                x = self._grad_block(x, grad_layers, subsampled_inputs[i], i, freq_weights[i])            
+                x = self._grad_block(x, grad_layers, subsampled_inputs[i], i, freq_weights[i])     
+     
             x = self._convolutional_block(
                 x, 
                 conv_layers = conv_layers, 
@@ -180,8 +181,10 @@ class GUnet(tf.keras.Model):
             )(x)
             x = tf.keras.layers.BatchNormalization()(x)
             # x = tf.keras.layers.ReLU()(x)
-            
-            x = self._grad_block(x, grad_layers, subsampled_inputs[depth-(i+1)], depth-(i+1), freq_weights[depth-(i+1)])            
+
+            # if i == depth-1:
+            if i != 0:
+                x = self._grad_block(x, grad_layers, subsampled_inputs[depth-(i+1)], depth-(i+1), freq_weights[depth-(i+1)])            
 
             x = tf.keras.layers.Concatenate()([x,skips[depth-(i+1)]])
 
@@ -224,11 +227,18 @@ class GUnet(tf.keras.Model):
     @staticmethod
     def _grad_block(x_, grad_layers, y, i, freq_weights=1):
         with tf.name_scope("grad_" + str(i)):
+            dirty_im = tf.expand_dims(tf.math.real(grad_layers[i].m_op.adj_op(  y)), axis=3)
+
             filtered_grad = tf.expand_dims(grad_layers[i](x_[:,:,:,0], y, measurement_weights=freq_weights), axis=3)
             # if the weights are not uniform, add a non-weighted gradient
             if np.any(freq_weights != np.ones(len(freq_weights))):
                 grad = tf.expand_dims(grad_layers[i](x_[:,:,:,0], y, measurement_weights=1), axis=3)
-                return tf.concat([x_[:,:,:,:], grad, filtered_grad], axis=3)
+                # return tf.concat([x_[:,:,:,:], grad, filtered_grad], axis=3)
+                # return tf.concat([x_[:,:,:,:], dirty_im, grad, filtered_grad], axis=3)
+                x_ = tf.concat([x_[:,:,:,:], grad, dirty_im], axis=3)
+                x_ = tf.keras.layers.Conv2D(16*2**(4-(i+1)), kernel_size=3, padding='same', activation='relu')(x_) #TODO remove hardcoded depth=4
+                return x_
+
             else: 
                 return tf.concat([x_[:,:,:,:], filtered_grad], axis=3)
 

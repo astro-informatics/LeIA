@@ -2,7 +2,7 @@ from functools import partial
 from tensorflow.python.framework.ops import disable_eager_execution
 
 from src.operators.NUFFT2D import NUFFT2D
-disable_eager_execution()
+# disable_eager_execution()
 
 import os
 import sys 
@@ -75,8 +75,8 @@ if operator == "NUFFT_SPIDER":
         mask = np.all(np.array(cell) ==  binned, axis=1)
         w_gridded[mask] = np.sum(mask)
 
-    # w = 
-    w = 1/w_gridded
+    w = np.linalg.norm(uv, axis=1)
+    # w = 1/w_gridded
     w /= w.max()
 elif operator == "NUFFT_Random":
     y_shape = int(Nd[0]**2/2)
@@ -182,10 +182,6 @@ pt_callback = PredictionTimeCallback(project_folder + f"/results/{data}/{operato
 
 print("Saving model history")
 # pickle.dump(history.history, open(project_folder + f"results/{data}/history_{network}_{ISNR}dB" + postfix + ".pkl", "wb"))
-#TODO add robustness test to this
-y_dirty_robustness = np.load(data_folder+ f"y_dirty_test_{ISNR}dB_robustness.npy").reshape(-1,y_shape)
-robustness_predict = model.predict(y_dirty_robustness, batch_size=batch_size)
-np.save(project_folder + f"data/processed/{data}/{operator}/test_predict_{network}_{ISNR}dB" + postfix + "_robustness.npy", robustness_predict)
 
 
 print("loading train and test data")
@@ -235,3 +231,8 @@ with pd.option_context('mode.use_inf_as_na', True):
     statistics.dropna(inplace=True)
 
 statistics.to_csv(project_folder + f"results/{data}/{operator}/statistics_{network}_{ISNR}dB{postfix}.csv")
+
+#TODO add robustness test to this
+y_dirty_robustness = np.load(data_folder+ f"y_dirty_test_{ISNR}dB_robustness.npy").reshape(-1,y_shape)
+robustness_predict = model.predict(y_dirty_robustness, batch_size=batch_size)
+np.save(project_folder + f"data/processed/{data}/{operator}/test_predict_{network}_{ISNR}dB" + postfix + "_robustness.npy", robustness_predict)

@@ -19,10 +19,10 @@ Nd = (256, 256)
 ISNR = 30 #dB
 
 epochs = 100
-train_size = 300
-test_size = 150
+train_size = 2000
+test_size = 1000
 
-data = 'TNG'
+data = 'COCO'
 random = False
 operator = sys.argv[1]
 project_folder = os.environ["HOME"] +"/src_aiai/"
@@ -98,8 +98,7 @@ for i in tqdm.tqdm(range(epochs+1)):
         np.save(f"{folder}/x_true_train_{ISNR}dB_{i-1:03d}.npy",  x_data)
         np.save(f"{folder}/y_dirty_train_{ISNR}dB_{i-1:03d}.npy", y_data)
 
-    break
-exit()
+
 
 if random: 
     np.save("./uvs.npy", uvs)

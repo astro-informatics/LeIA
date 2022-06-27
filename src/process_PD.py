@@ -22,7 +22,7 @@ from src.operators.dictionary import wavelet_basis
 
 ISNR = 30 #int(sys.argv[1])
 mode = sys.argv[1] # train or test
-data = "TNG" #sys.argv[3]
+data = "COCO" #sys.argv[3]
 operator = sys.argv[2]
 project_folder = os.environ["HOME"] +"/src_aiai/"
 # ISNR = 50
@@ -57,6 +57,8 @@ elif operator == "NNFFT_Random":
 if mode == "train":
     x_true = np.load(project_folder + f"data/intermediate/{data}/{operator}/x_true_train_{ISNR}dB.npy")
     y_dirty = np.load(project_folder +f"data/intermediate/{data}/{operator}/y_dirty_train_{ISNR}dB.npy")
+    noise_values = np.load(project_folder +f"data/intermediate/{data}/{operator}/noise_values_train_{ISNR}dB.npy")
+
     # noise_val = np.load(project_folder +f"data/intermediate/{data}/noise_levels_train_{ISNR}dB.npy")
     try:
         predict_x = np.load(project_folder + f"data/processed/{data}/{operator}/train_predict_PD_{ISNR}dB.npy")
@@ -72,6 +74,8 @@ if mode == "train":
 elif mode == "test":
     x_true = np.load(project_folder + f"data/intermediate/{data}/{operator}/x_true_test_{ISNR}dB.npy")
     y_dirty = np.load(project_folder + f"data/intermediate/{data}/{operator}/y_dirty_test_{ISNR}dB.npy")
+    noise_values = np.load(project_folder +f"data/intermediate/{data}/{operator}/noise_values_test_{ISNR}dB.npy")
+
     # noise_val = np.load(project_folder +f"data/intermediate/{data}/noise_levels_test_{ISNR}dB.npy")
     #predict_x = np.zeros_like(x_true)
     try:
@@ -88,7 +92,7 @@ elif mode == "test":
 # m_op.plan(uv, (256,256), (512, 512), (6,6))
 
 psi = wavelet_basis(x_true[0,:].shape)
-solver = PrimalDual_l1_constrained(m_op=m_op, psi=psi, beta=1e-2,
+solver = PrimalDual_l1_constrained(m_op=m_op, psi=psi, beta=1e-5,
     options={
         'tol': 1e-6, 'iter': iterations, 'update_iter': 500, 
         'record_iters': False, 'positivity': True, 'real': True})
@@ -131,7 +135,7 @@ pool_size = 100
 # solvers = [copy.deepcopy(solver) for i in range(pool_size)]
 
 for i in tqdm.tqdm(range(start, len(x_true), pool_size)):
-    iterables = [(y_dirty[i].reshape(-1), m_op, noise_val, solver) for i in range(i, min(i+pool_size, len(y_dirty)))]
+    iterables = [(y_dirty[i].reshape(-1), m_op, noise_values[i], solver) for i in range(i, min(i+pool_size, len(y_dirty)))]
     # with multiprocessing.Pool(pool_size) as pool:
     #     result = pool.map(process, iterables)
     result = [process(x) for x in tqdm.tqdm(iterables)]
