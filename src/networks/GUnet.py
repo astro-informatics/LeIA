@@ -235,7 +235,7 @@ class GUnet(tf.keras.Model):
                 grad = tf.expand_dims(grad_layers[i](x_[:,:,:,0], y, measurement_weights=1), axis=3)
                 # return tf.concat([x_[:,:,:,:], grad, filtered_grad], axis=3)
                 # return tf.concat([x_[:,:,:,:], dirty_im, grad, filtered_grad], axis=3)
-                x_ = tf.concat([x_[:,:,:,:], grad, dirty_im], axis=3)
+                x_ = tf.concat([x_[:,:,:,:], grad, filtered_grad, dirty_im], axis=3)
                 x_ = tf.keras.layers.Conv2D(16*2**(4-(i+1)), kernel_size=3, padding='same', activation='relu')(x_) #TODO remove hardcoded depth=4
                 return x_
 

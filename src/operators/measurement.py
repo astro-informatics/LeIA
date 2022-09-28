@@ -1,9 +1,9 @@
 
 import numpy as np
-from pynufft import NUFFT
+#from pynufft import NUFFT
 
-from tfkbnufft import kbnufft_forward, kbnufft_adjoint
-from tfkbnufft.kbnufft import KbNufftModule
+#from tfkbnufft import kbnufft_forward, kbnufft_adjoint
+#from tfkbnufft.kbnufft import KbNufftModule
 
 
 from scipy.special import iv, jv

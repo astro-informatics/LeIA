@@ -78,7 +78,10 @@ class NUFFT2D_TF():
         kk = self._xx2kk(xx) / self.Kd[0]
         k = self._kk2k(kk)
         return k
-    
+
+    def dir_op_no_grad(self, xx):
+        return tf.stop_gradient(self.dir_op(xx))
+
     def adj_op(self, k, measurement_weighting=False):
         # split real and imaginary parts because complex operations not defined for sparseTensors
         if measurement_weighting:
@@ -91,6 +94,9 @@ class NUFFT2D_TF():
             xx = xx / self.normalization_factor # normalising for operator norm
         return xx
     
+    def adj_op_no_grad(self, k, measurement_weighting=False):
+        return tf.stop_gradient(self.adj_op(k, measurement_weighting=False))
+
     def _kk2k(self, kk):
         """interpolates of the grid to non uniform measurements"""
         v = tf.gather_nd(kk, self.batch_indices)

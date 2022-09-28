@@ -25,6 +25,7 @@ mode = sys.argv[1] # train or test
 data = "COCO" #sys.argv[3]
 operator = sys.argv[2]
 project_folder = os.environ["HOME"] +"/src_aiai/"
+post_fix = '_new_wavelets'
 # ISNR = 50
 # mode = 'train'
 # mode = 'test'
@@ -61,9 +62,9 @@ if mode == "train":
 
     # noise_val = np.load(project_folder +f"data/intermediate/{data}/noise_levels_train_{ISNR}dB.npy")
     try:
-        predict_x = np.load(project_folder + f"data/processed/{data}/{operator}/train_predict_PD_{ISNR}dB.npy")
-        timings = np.load(project_folder + f"data/processed/{data}/{operator}/times_train_{ISNR}dB.npy")
-        diags = pickle.load(open(project_folder + f"results/{data}/{operator}/diag_{ISNR}dB.npy", "rb"))
+        predict_x = np.load(project_folder + f"data/processed/{data}/{operator}/train_predict_PD_{ISNR}dB{post_fix}.npy")
+        timings = np.load(project_folder + f"data/processed/{data}/{operator}/times_train_{ISNR}dB{post_fix}.npy")
+        diags = pickle.load(open(project_folder + f"results/{data}/{operator}/diag_{ISNR}dB{post_fix}.npy", "rb"))
     except:
         predict_x = np.zeros_like(x_true)
         timings = np.zeros(len(predict_x))
@@ -79,8 +80,8 @@ elif mode == "test":
     # noise_val = np.load(project_folder +f"data/intermediate/{data}/noise_levels_test_{ISNR}dB.npy")
     #predict_x = np.zeros_like(x_true)
     try:
-        predict_x = np.load(project_folder + f"data/processed/{data}/{operator}/test_predict_PD_{ISNR}dB.npy")
-        timings = np.load(project_folder + f"data/processed/{data}/{operator}/times_test_{ISNR}dB.npy")
+        predict_x = np.load(project_folder + f"data/processed/{data}/{operator}/test_predict_PD_{ISNR}dB{post_fix}.npy")
+        timings = np.load(project_folder + f"data/processed/{data}/{operator}/times_test_{ISNR}dB{post_fix}.npy")
     except:
         predict_x = np.zeros_like(x_true)
         timings = np.zeros(len(predict_x))
@@ -91,7 +92,7 @@ elif mode == "test":
 # m_op = NUFFT_op()
 # m_op.plan(uv, (256,256), (512, 512), (6,6))
 
-psi = wavelet_basis(x_true[0,:].shape)
+psi = wavelet_basis(x_true[0,:].shape, wavelets=["db8", "db7", "db6", "db5", "db4", "db3", "db2", "db1", "dirac"], levels=3)
 solver = PrimalDual_l1_constrained(m_op=m_op, psi=psi, beta=1e-5,
     options={
         'tol': 1e-6, 'iter': iterations, 'update_iter': 500, 
@@ -147,16 +148,16 @@ for i in tqdm.tqdm(range(start, len(x_true), pool_size)):
     diags[i:i+len(times)] = a[2]
 
     if mode == "train":
-        np.save(project_folder + f"data/processed/{data}/{operator}/train_predict_PD_{ISNR}dB.npy", predict_x)
-        np.save(project_folder + f"data/processed/{data}/{operator}/times_train_{ISNR}dB.npy", timings)
-        pickle.dump(diags, open(project_folder + f"results/{data}/{operator}/diag_{ISNR}dB.npy", "wb"))
+        np.save(project_folder + f"data/processed/{data}/{operator}/train_predict_PD_{ISNR}dB{post_fix}.npy", predict_x)
+        np.save(project_folder + f"data/processed/{data}/{operator}/times_train_{ISNR}dB{post_fix}.npy", timings)
+        pickle.dump(diags, open(project_folder + f"results/{data}/{operator}/diag_{ISNR}dB{post_fix}.npy", "wb"))
     elif mode == "test":
         np.save(project_folder + f"data/processed/{data}/{operator}/test_predict_PD_{ISNR}dB.npy", predict_x)
         np.save(project_folder + f"data/processed/{data}/{operator}/times_test_{ISNR}dB.npy", timings)
 
 if mode == "train":
-    np.save(project_folder + f"data/processed/{data}/{operator}/train_predict_PD_{ISNR}dB.npy", predict_x)
-    np.save(project_folder + f"data/processed/{data}/{operator}/times_train_{ISNR}dB.npy", timings)
+    np.save(project_folder + f"data/processed/{data}/{operator}/train_predict_PD_{ISNR}dB{post_fix}.npy", predict_x)
+    np.save(project_folder + f"data/processed/{data}/{operator}/times_train_{ISNR}dB{post_fix}.npy", timings)
 elif mode == "test":
-    np.save(project_folder + f"data/processed/{data}/{operator}/test_predict_PD_{ISNR}dB.npy", predict_x)
-    np.save(project_folder + f"data/processed/{data}/{operator}/times_test_{ISNR}dB.npy", timings)
+    np.save(project_folder + f"data/processed/{data}/{operator}/test_predict_PD_{ISNR}dB{post_fix}.npy", predict_x)
+    np.save(project_folder + f"data/processed/{data}/{operator}/times_test_{ISNR}dB{post_fix}.npy", timings)

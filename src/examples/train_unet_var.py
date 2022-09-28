@@ -1,5 +1,6 @@
 from functools import partial
 from re import S
+import time
 from tensorflow.python.framework.ops import disable_eager_execution
 
 from src.operators.NUFFT2D import NUFFT2D
@@ -26,6 +27,8 @@ from src.callbacks import PredictionTimeCallback, TimeOutCallback, CSV_logger_pl
 # model and dataset generator
 from src.networks.UNet import UNet
 from src.networks.GUnet import GUnet
+# from src.networks.GUnet_mod_grad import GUnet
+
 
 from src.dataset import Dataset, PregeneratedDataset, data_map, make_yogadl_dataset, measurement_func, random_crop, data_map_image
 
@@ -36,7 +39,7 @@ gpu_setup()
 
 #TODO add a nice argument parser
 
-epochs = 500
+epochs = 40
 set_size = 2000 # size of the train set
 save_freq = 20 # save every 20 epochs
 batch_size = 20 
@@ -45,6 +48,7 @@ max_train_time = 40*60 # time after which training should stop in mins
 
 ISNR = 30 #dB
 network = "UNet_var"
+net = UNet
 activation = "linear"
 load_weights = bool(int(sys.argv[1])) # continuing the last run
 operator = str(sys.argv[2])
@@ -126,14 +130,19 @@ if not load_weights:
     # ds = Dataset(set_size, data)
     # data_map = partial(data_map, y_size=y_shape, z_size=(256,256))
     # yogadl_dataset = make_yogadl_dataset(ds) # use yogadl for caching and shuffling the data
-    
-model = Unet(
+
+if not load_weights:
+    uv = np.load('uvs.npy')[0]
+else:
+    uv = uv_test
+
+model = net(
     Nd, 
-    uv=uv_test,
-    op=NUFFT2D_TF, 
+    uv=uv,
+    op=op, 
     depth=4, 
-    input_type=input_type, 
     conv_layers=2,
+    input_type='measurements', 
     measurement_weights=w,
     batch_size=batch_size
     )
@@ -180,6 +189,7 @@ print("training")
 if not load_weights:
     uvs = np.load('uvs.npy')
     for i in range(epochs):    
+        st_epoch = time.time()
         csv_logger = CSV_logger_plus(project_folder + f"logs/{data}/{operator}/log_{network}_{ISNR}dB" + postfix + "", append=True)
         callbacks = [csv_logger]
         #TODO add appending to the loss function
@@ -189,10 +199,14 @@ if not load_weights:
         uv = uvs[i%100]
         x = np.load(f"./data/intermediate/COCO/NUFFT_Random_var/x_true_train_30dB_{i%100:03d}.npy")
         y =np.load(f"./data/intermediate/COCO/NUFFT_Random_var/y_dirty_train_30dB_{i%100:03d}.npy")
+        print("rebuilding with new op")
+        st = time.time()
+        if i != 0:
+            model = model.rebuild_with_op(uv)
+        print(f"rebuilding done in {time.time() - st:.2f}s")
 
         print(f"fitting epoch: {i}")
-        model = model.rebuild_with_op(uv)
-        model.fit(y, x, epochs=1, 
+        model.fit(y, x, epochs=5, 
             callbacks=callbacks,
             batch_size=batch_size)
         
@@ -205,7 +219,8 @@ if not load_weights:
         # )
         if i % 20 == 0:
             model.save_weights(checkpoint_folder + f"/cp-{i:04d}.ckpt")
-            
+        
+        print(f"epoch took {time.time() - st_epoch:.2f}s. Estimated time left: {(epochs-i-1)*(time.time() - st_epoch):.2f}s")
 
 
 # for saving how long predictions take

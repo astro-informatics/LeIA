@@ -11,11 +11,12 @@ class dictionary_tf(linear_operators.dictionary):
 
 def wavelet_basis(shape, wavelets=None, levels=None, TF=False):
     if wavelets is None:
-        wav = ["db8", "db6", "db4", "db2", "db1", "dirac"]
+        wavelets = ["db8", "db6", "db4", "db2", "db1", "dirac"]
         levels = 3 #wavelet levels, makes no difference for dirac
         # you can choose the convergence criteria of the algorithm
 
     # if TF:
     #     return dictionary_tf(wav, levels, shape)
-    return linear_operators.dictionary(wav, levels, shape)
+    return linear_operators.dictionary(wavelets, levels, shape)
 
+ 

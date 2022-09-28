@@ -8,7 +8,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras import callbacks
 
-# tf.compat.v1.disable_eager_execution() # GUNet cannot use eager execution
+tf.compat.v1.disable_eager_execution() # GUNet cannot use eager execution
 
 
 # operators and sampling patterns
@@ -89,8 +89,8 @@ max_train_time = 40*60 # time after which training should stop in mins
 
 
 ISNR = 30 #dB
-network = "UNet"
-net = UNet
+network = "GUnet"
+net = GUnet
 activation = "linear"
 
 
@@ -260,19 +260,19 @@ def create_callbacks(data, operator, network, ISNR, postfix):
 
 ###### simple training ########
 # train model using limited data
-print("start first model")
-postfix = f"_{data}"
-callbacks = create_callbacks(data, operator, network, ISNR, postfix)
+# print("start first model")
+# postfix = f"_{data}"
+# callbacks = create_callbacks(data, operator, network, ISNR, postfix)
 
-history = model.fit(
-    dataset,
-    epochs=epochs, 
-    callbacks=callbacks,
-    steps_per_epoch=set_size//batch_size
-)
+# history = model.fit(
+#     dataset,
+#     epochs=epochs, 
+#     callbacks=callbacks,
+#     steps_per_epoch=set_size//batch_size
+# )
 
-# predict using this model
-predict(x_train, y_train, x_test, y_test, model, batch_size, data, ISNR, postfix=postfix)
+# # predict using this model
+# predict(x_train, y_train, x_test, y_test, model, batch_size, data, ISNR, postfix=postfix)
 
 
 ###### transfer predict w/o training ########
