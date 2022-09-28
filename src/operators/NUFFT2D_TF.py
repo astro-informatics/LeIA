@@ -79,8 +79,6 @@ class NUFFT2D_TF():
         k = self._kk2k(kk)
         return k
 
-    def dir_op_no_grad(self, xx):
-        return tf.stop_gradient(self.dir_op(xx))
 
     def adj_op(self, k, measurement_weighting=False):
         # split real and imaginary parts because complex operations not defined for sparseTensors
@@ -94,8 +92,48 @@ class NUFFT2D_TF():
             xx = xx / self.normalization_factor # normalising for operator norm
         return xx
     
-    def adj_op_no_grad(self, k, measurement_weighting=False):
-        return tf.stop_gradient(self.adj_op(k, measurement_weighting=False))
+
+    def _kk2k_sub(self, kk, sel):
+        """interpolates of the grid to non uniform measurements"""
+        batch_indices = self.batch_indices.reshape(-1, self.Jd[0]*self.Jd[1], 3)
+        sel_batch_indices = tf.reshape(tf.boolean_mask(batch_indices, sel, axis=0), [-1,3])
+        sel_batch_values = tf.cast(tf.boolean_mask(self.batch_values, sel, axis=1), tf.complex64)
+        
+        v = tf.gather_nd(kk, sel_batch_indices)
+        r = tf.reshape(v, (self.batch_size, -1, self.Jd[0]*self.Jd[1])) * sel_batch_values
+        return tf.reduce_sum(r, axis=2)
+
+    def dir_op_sub(self, xx, sel):
+        xx = tf.cast(xx, tf.complex64)
+        xx = xx/self.scaling
+        xx = self._pad(xx)
+        kk = self._xx2kk(xx) / self.Kd[0]
+        k = self._kk2k_sub( kk, sel)
+        return k
+
+    def _k2kk_sub(self, k_sub, sel):
+        """convolutes measurements to oversampled fft grid"""
+#         interp = k_sub[:,:,None] * self.batch_values[:, sel]
+        interp = k_sub[:,:,None] * tf.cast(tf.boolean_mask(self.batch_values, sel, axis=1), tf.complex64)
+        interp = tf.reshape(interp, [-1])
+
+        batch_indices = self.batch_indices.reshape(-1, self.Jd[0]*self.Jd[1], 3)
+        sel_batch_indices = tf.reshape(tf.boolean_mask(batch_indices, sel, axis=0), [-1,3])
+
+        f = tf.scatter_nd(sel_batch_indices, interp, [self.batch_size] + list(self.Kd))
+        return f
+
+    def adj_op_sub(self, k, sel, measurement_weighting=False):
+        # split real and imaginary parts because complex operations not defined for sparseTensors
+        if measurement_weighting:
+            k = k * self.measurement_weights # weighting measurements
+        kk = self._k2kk_sub( k, sel)
+        xx = self._kk2xx(kk) * self.Kd[0]
+        xx = self._unpad(xx)
+        xx = xx / self.scaling
+        if measurement_weighting:
+            xx = xx / self.normalization_factor # normalising for operator norm
+        return xx
 
     def _kk2k(self, kk):
         """interpolates of the grid to non uniform measurements"""
