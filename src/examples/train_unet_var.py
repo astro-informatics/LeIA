@@ -1,5 +1,4 @@
 from functools import partial
-from re import S
 import time
 from tensorflow.python.framework.ops import disable_eager_execution
 
@@ -25,7 +24,7 @@ from src.sampling.uv_sampling import spider_sampling, random_sampling
 from src.callbacks import PredictionTimeCallback, TimeOutCallback, CSV_logger_plus 
 
 # model and dataset generator
-from src.networks.UNet import UNet
+from src.networks.UNet_var import UNet_var
 from src.networks.GUnet import GUnet
 # from src.networks.GUnet_mod_grad import GUnet
 
@@ -39,7 +38,7 @@ gpu_setup()
 
 #TODO add a nice argument parser
 
-epochs = 40
+epochs = 200
 set_size = 2000 # size of the train set
 save_freq = 20 # save every 20 epochs
 batch_size = 20 
@@ -48,18 +47,25 @@ max_train_time = 40*60 # time after which training should stop in mins
 
 ISNR = 30 #dB
 network = "UNet_var"
-net = UNet
+net = UNet_var
 activation = "linear"
 load_weights = bool(int(sys.argv[1])) # continuing the last run
-operator = str(sys.argv[2])
+operator = str(sys.argv[2]) + "_var"
 
 try: 
     postfix = "_" + str(sys.argv[3])
 except:
     postfix = ""
 
+postfix += "_test"
 
 data = "COCO"
+
+# defining the necessary paths based on parameters
+project_folder = os.environ["HOME"] + "/src_aiai/"
+data_folder = project_folder + f"data/intermediate/{data}/{operator}/"
+checkpoint_folder = project_folder+ f"models/{data}/{operator}/{network}_{ISNR}dB{postfix}"
+checkpoint_path = checkpoint_folder + "/cp-{epoch:04d}.ckpt"
 
 Nd = (256, 256)
 Kd = (512, 512)
@@ -85,10 +91,10 @@ if operator == "NUFFT_SPIDER":
     # w = 
     w = 1/w_gridded
     w /= w.max()
-elif operator == "NUFFT_Random":
-    y_shape = int(Nd[0]**2/2)
-    uv = random_sampling(y_shape)
-    uv_test = uv
+elif operator == "NUFFT_Random" or operator == "NUFFT_Random_var":
+    y_shape = int(Nd[0]**2)
+    uv = np.load(data_folder + "/uv_big.npy")
+    uv_test = np.load(data_folder + "/uv_original.npy")
     op = NUFFT2D_TF
     w = np.ones(len(uv)) # no weights necessary for 50% sampling
 elif operator == "NNFFT_Random":
@@ -109,51 +115,129 @@ else:
     exit()
 
 
+# dataset classes
+class X(tf.data.Dataset):
+    """a dataset that loads pre-augmented data. """
+
+    @staticmethod
+    def _generator(epochs, operator="NUFFT_SPIDER", ISNR=30):
+        i = 0
+        try:
+            operator = operator.decode('utf-8')
+        except:
+            pass
+        while True:
+            x = np.load(f"./data/intermediate/COCO/{operator}/x_true_train_{ISNR}dB_{i:03d}.npy")
+          
+            yield x
+            i = (i + 1) % 100 # only a 100 presaved so reuse them
+
+    def __new__(cls, operator, ISNR=30, epochs=100):
+        # assert os.path.exists(
+            # f"./data/intermediate/COCO/{operator}" ), \
+            # f"Could not find pregenerated dataset for operator {operator}"
+        return tf.data.Dataset.from_generator(
+            cls._generator,
+            output_types=(tf.float32),
+            args=(epochs, operator, ISNR)
+        )
+    
+class Y(tf.data.Dataset):
+    """a dataset that loads pre-augmented data. """
+
+    @staticmethod
+    def _generator(epochs, operator="NUFFT_SPIDER", ISNR=30):
+        i = 0
+        try:
+            operator = operator.decode('utf-8')
+        except:
+            pass
+        while True:
+            y = np.load(f"./data/intermediate/COCO/{operator}/y_dirty_train_{ISNR}dB_{i:03d}.npy")
+            yield y
+            i = (i + 1) % 100 # only a 100 presaved so reuse them
+
+    def __new__(cls, operator, ISNR=30, epochs=100):
+        # assert os.path.exists(
+            # f"./data/intermediate/COCO/{operator}" ), \
+            # f"Could not find pregenerated dataset for operator {operator}"
+        return tf.data.Dataset.from_generator(
+            cls._generator,
+            output_types=(tf.complex64),
+            args=(epochs, operator, ISNR)
+        )
+    
+class Z(tf.data.Dataset):
+    """a dataset that loads pre-augmented data. """
+
+    @staticmethod
+    def _generator(epochs, operator="NUFFT_SPIDER", ISNR=30):
+        i = 0
+        try:
+            operator = operator.decode('utf-8')
+        except:
+            pass
+        while True:
+            z = np.load(f"./data/intermediate/COCO/{operator}/sel_train_{ISNR}dB_{i:03d}.npy")
+            yield z
+            i = (i + 1) % 100 # only a 100 presaved so reuse them
+
+    def __new__(cls, operator, ISNR=30, epochs=100):
+        # assert os.path.exists(
+            # f"./data/intermediate/COCO/{operator}" ), \
+            # f"Could not find pregenerated dataset for operator {operator}"
+        return tf.data.Dataset.from_generator(
+            cls._generator,
+            output_types=(tf.bool),
+            args=(epochs, operator, ISNR)
+        )
+
+
+x_dataset = X(
+    operator=operator, epochs=epochs
+    ).unbatch()
+
+y_dataset = Y(
+    operator=operator, epochs=epochs
+    ).unbatch()
+
+z_dataset = Z(
+    operator=operator, epochs=epochs
+    ).unbatch()
+
+yz = tf.data.Dataset.zip((y_dataset, z_dataset))
+# yzx = tf.data.Dataset.zip((yz, x_dataset)).batch(batch_size, num_parallel_calls=tf.data.AUTOTUNE).prefetch(set_size//batch_size)
+
+yzx = tf.data.Dataset.zip((yz, x_dataset)).batch(batch_size)
 
 
 
-if not load_weights:
-    # raise NotImplementedError
-    dataset = PregeneratedDataset(
-    operator=operator +"_var", epochs=epochs
-    ).unbatch().batch(batch_size=batch_size, num_parallel_calls=tf.data.AUTOTUNE).map(lambda x, y: data_map(x,y, y_size=len(uv)), num_parallel_calls=tf.data.AUTOTUNE).prefetch(set_size//batch_size)
 
-    # data_map = data_map if input_type=="measurements" else data_map_image
-    # print("creating dataset")
-    # tf_funcs = []
-    # ops = []
-    # for i in range(10):
-    #     uv = random_sampling(y_shape, np.random.randint(0, 2**32 -1))
-    #     tf_func, func, op = measurement_func(uv,  m_op=data_op, Nd=(256,256), data_shape=y_shape, ISNR=ISNR)
-    #     tf_funcs.append(tf_func)
-    #     ops.append(op)
-    # ds = Dataset(set_size, data)
-    # data_map = partial(data_map, y_size=y_shape, z_size=(256,256))
-    # yogadl_dataset = make_yogadl_dataset(ds) # use yogadl for caching and shuffling the data
-
-if not load_weights:
-    uv = np.load('uvs.npy')[0]
-else:
-    uv = uv_test
-
-model = net(
-    Nd, 
-    uv=uv,
-    op=op, 
-    depth=4, 
-    conv_layers=2,
-    input_type='measurements', 
-    measurement_weights=w,
-    batch_size=batch_size
-    )
+# model = net(
+#     Nd, 
+#     uv=uv,
+#     op=op, 
+#     depth=4, 
+#     conv_layers=2,
+#     input_type='measurements', 
+#     measurement_weights=w,
+#     batch_size=batch_size,
+#     residual=True
+#     )
 
 # operator += "_var"
-# defining the necessary paths based on parameters
-project_folder = os.environ["HOME"] + "/src_aiai/"
-data_folder = project_folder + f"data/intermediate/{data}/{operator}/"
-checkpoint_folder = project_folder+ f"models/{data}/{operator}/{network}_{ISNR}dB{postfix}"
-checkpoint_path = checkpoint_folder + "/cp-{epoch:04d}.ckpt"
 
+model = UNet_var(
+    Nd, 
+    uv=uv,
+    op=NUFFT2D_TF, 
+    depth=4, 
+    conv_layers=2,
+    input_type="measurements", 
+    measurement_weights=1,
+    batch_size=batch_size,
+    residual=True
+    )
 
 if load_weights:    
     print("loading weights")
@@ -187,40 +271,7 @@ callbacks = [
 print("training")
 
 if not load_weights:
-    uvs = np.load('uvs.npy')
-    for i in range(epochs):    
-        st_epoch = time.time()
-        csv_logger = CSV_logger_plus(project_folder + f"logs/{data}/{operator}/log_{network}_{ISNR}dB" + postfix + "", append=True)
-        callbacks = [csv_logger]
-        #TODO add appending to the loss function
-        # dataset2 = dataset.skip(i*set_size//batch_size) # make sure to select right data
-
-        print("loading epoch data")
-        uv = uvs[i%100]
-        x = np.load(f"./data/intermediate/COCO/NUFFT_Random_var/x_true_train_30dB_{i%100:03d}.npy")
-        y =np.load(f"./data/intermediate/COCO/NUFFT_Random_var/y_dirty_train_30dB_{i%100:03d}.npy")
-        print("rebuilding with new op")
-        st = time.time()
-        if i != 0:
-            model = model.rebuild_with_op(uv)
-        print(f"rebuilding done in {time.time() - st:.2f}s")
-
-        print(f"fitting epoch: {i}")
-        model.fit(y, x, epochs=5, 
-            callbacks=callbacks,
-            batch_size=batch_size)
-        
-        # history = model.fit_with_new_operator(
-        #     dataset,
-        #     uv=uvs[i%len(uvs)],
-        #     epochs=1, 
-        #     callbacks=callbacks,
-        #     steps_per_epoch=set_size//batch_size
-        # )
-        if i % 20 == 0:
-            model.save_weights(checkpoint_folder + f"/cp-{i:04d}.ckpt")
-        
-        print(f"epoch took {time.time() - st_epoch:.2f}s. Estimated time left: {(epochs-i-1)*(time.time() - st_epoch):.2f}s")
+    model.fit(yzx, steps_per_epoch=set_size//batch_size, epochs=epochs)
 
 
 # for saving how long predictions take
@@ -233,9 +284,11 @@ pt_callback = PredictionTimeCallback(project_folder + f"/results/{data}/{operato
 print("loading train and test data")
 x_true = np.load(data_folder+ f"x_true_train_{ISNR}dB.npy").reshape(-1,256,256)
 y_dirty = np.load(data_folder+ f"y_dirty_train_{ISNR}dB.npy").reshape(-1,y_shape)
+sel_dirty = np.ones_like(y_dirty, dtype=bool)
 
 x_true_test = np.load(data_folder+ f"x_true_test_{ISNR}dB.npy").reshape(-1,256,256)
 y_dirty_test = np.load(data_folder+ f"y_dirty_test_{ISNR}dB.npy").reshape(-1,y_shape)
+sel_dirty_test = np.ones_like(y_dirty_test, dtype=bool)
 
 # m_op = NUFFT2D_TF()
 # m_op.plan(uv_test, (Nd[0], Nd[1]), (Nd[0]*2, Nd[1]*2), (6,6))
@@ -243,9 +296,9 @@ model = model.rebuild_with_op(uv_test)
 
 
 print("predict train")
-train_predict = model.predict(y_dirty, batch_size=batch_size, callbacks=[pt_callback])
+train_predict = model.predict([y_dirty, sel_dirty], batch_size=batch_size, callbacks=[pt_callback])
 print("predict test")
-test_predict = model.predict(y_dirty_test, batch_size=batch_size)
+test_predict = model.predict([y_dirty_test, sel_dirty_test], batch_size=batch_size)
 
 operator = "NUFFT_Random_var"
 

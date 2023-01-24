@@ -7,6 +7,7 @@ import sys
 import tqdm
 import numpy as np
 import tensorflow as tf
+import glob
 
 from src.dataset import measurement_func, Dataset, random_crop, center_crop, EllipseDataset
 from src.operators.NUFFT2D import NUFFT2D
@@ -21,10 +22,10 @@ ISNR = 30 #dB
 epochs = 100
 train_size = 2000
 test_size = 1000
-
 n_operators = 100
 
-data = 'COCO'
+# data = 'COCO'
+data = 'TNG'
 random = True
 operator = sys.argv[1]
 project_folder = os.environ["HOME"] +"/src_aiai/"
@@ -79,7 +80,7 @@ tf_func = tf_func_original
 
 if random:
     print("generating random operator sub-sets")
-    tf_func_big, func_big = measurement_func(uv,  m_op=None, Nd=Nd, ISNR=ISNR)
+    tf_func, func_big = measurement_func(uv,  m_op=None, Nd=Nd, ISNR=ISNR)
 
 
 
@@ -88,8 +89,28 @@ if random:
 np.random.seed(8394829)
 tf.random.set_seed(8394829)
 
-ds = Dataset(train_size + test_size, data)
-uvs = []
+class TNGDataset(tf.data.Dataset):
+    """a dataset that loads pre-augmented data. """
+
+    @staticmethod
+    def _generator():
+        files = glob.glob("/home/mars/git/IllustrisTNG/data/processed_256/TNG*.npy")
+        x = np.array([np.load(file) for file in files])
+        while True:
+            yield x[:,:,:,np.newaxis]
+
+    def __new__(cls):
+        return tf.data.Dataset.from_generator(
+            cls._generator,
+            output_types=(tf.float32),
+            args=()
+        )
+
+if data == "COCO":
+    ds = Dataset(train_size + test_size, data)
+elif data == "TNG":
+    ds = TNGDataset().unbatch()
+
 
 print("start creating datasets")
 for i in tqdm.tqdm(range(epochs+1)):
@@ -107,14 +128,14 @@ for i in tqdm.tqdm(range(epochs+1)):
         np.save(f"{folder}/y_dirty_test_{ISNR}dB.npy",  y_data[train_size:])
         dataset = ds.take(train_size).cache()
     else:
-        if random:
-            sel_data = []
-            for idx in range(len(train_size)):
-                if idx % 20 == 0:
-                    batch_sel = np.random.permutation(len(uv)) > len(uv)/2
+        # if random:
+            # sel_data = []
+            # for idx in range(train_size):
+            #     if idx % 20 == 0:
+            #         batch_sel = np.random.permutation(len(uv)) > len(uv)/2
 
-                sel_data.append(batch_sel)                         
-            np.save(f"{folder}/sel_train_{ISNR}dB_{i-1:03d}.npy", sel_data) 
+            #     sel_data.append(batch_sel)                         
+            # np.save(f"{folder}/sel_train_{ISNR}dB_{i-1:03d}.npy", sel_data) 
 
         dataset2 = dataset.shuffle(train_size).map(random_crop).map(tf_func)
         array = list(dataset2.as_numpy_iterator())
@@ -127,9 +148,6 @@ for i in tqdm.tqdm(range(epochs+1)):
 
 
 exit()
-if random: 
-    np.save("./uvs.npy", uvs)
-
 
 # set with varying ISNR
 x_robustness = []
@@ -140,7 +158,7 @@ folder = project_folder + f"data/intermediate/{data}/{operator}/"
 for isnr in tqdm.tqdm(np.arange(30, 5,-2.5)):
     tf_func, func = measurement_func(uv_original,  m_op=m_op_original, Nd=Nd, ISNR=isnr)
 
-    dataset2 = dataset.skip(2000).take(100).map(random_crop).map(tf_func)
+    dataset2 = dataset.skip(set_size).take(100).map(random_crop).map(tf_func)
     array = list(dataset2.as_numpy_iterator())
 
     y_data = np.array([x[0] for x in array])

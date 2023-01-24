@@ -3,7 +3,7 @@ import numpy as np
 import tensorflow as tf
 
 
-class UNet(tf.keras.Model):
+class UNet_var(tf.keras.Model):
     def __init__(
         self, 
         image_shape, 
@@ -39,17 +39,16 @@ class UNet(tf.keras.Model):
             x = inputs
         elif input_type == "measurements":
             self.op = op # save the used operator
-            m_op = self.op()
-            m_op.plan(uv, image_shape, (image_shape[0]*2, image_shape[1]*2), (6,6), batch_size=batch_size) #TODO change these hardcoded values for upsampling
+            self.m_op = self.op()
+            self.m_op.plan(uv, image_shape, (image_shape[0]*2, image_shape[1]*2), (6,6), batch_size=batch_size) #TODO change these hardcoded values for upsampling
             assert op is not None, "Operator needs to be specified when passing measurements as input" 
             # calculate initial image using a weighted adjoint
-            inputs = tf.keras.Input([m_op.n_measurements], dtype=tf.complex64)
-            sel = tf.keras.Input([m_op.n_measurements], dtype=tf.bool)
+            inputs = tf.keras.Input([self.m_op.n_measurements], dtype=tf.complex64)
+            sel = tf.keras.Input([self.m_op.n_measurements], dtype=tf.bool)
             
-            y_sub = tf.boolean_mask(inputs, sel[0], axis=1)
+            y_sub = tf.boolean_mask(inputs * measurement_weights, sel[0], axis=1)
 #             x = tf.math.real(m_op.adj_op_sub(inputs * measurement_weights), sel)
-            x = tf.math.real(m_op.adj_op_sub(y_sub, sel[0]))
-            
+            x = tf.math.real(self.m_op.adj_op_sub(y_sub, tf.reshape(sel[0], [-1])))
         else:
             raise ValueError("argument input_type should be one of ['image', 'measurements']")
         
@@ -145,7 +144,7 @@ class UNet(tf.keras.Model):
 
         # reset graph and make new model with same parameters but new sampling distribution
         tf.keras.backend.clear_session()
-        model = UNet(
+        model = UNet_var(
             self.image_shape, 
             uv,
             op=self.op, 
