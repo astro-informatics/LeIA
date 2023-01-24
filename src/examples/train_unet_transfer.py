@@ -100,7 +100,8 @@ except:
     postfix = ""
 
 
-data = "SATS"
+# data = "SATS"
+data = "TNG"
 
 # creating the operator
 Nd = (256, 256)
@@ -260,19 +261,19 @@ def create_callbacks(data, operator, network, ISNR, postfix):
 
 ###### simple training ########
 # train model using limited data
-# print("start first model")
-# postfix = f"_{data}"
-# callbacks = create_callbacks(data, operator, network, ISNR, postfix)
+print("start first model")
+postfix = f"_{data}"
+callbacks = create_callbacks(data, operator, network, ISNR, postfix)
 
-# history = model.fit(
-#     dataset,
-#     epochs=epochs, 
-#     callbacks=callbacks,
-#     steps_per_epoch=set_size//batch_size
-# )
+history = model.fit(
+    dataset,
+    epochs=epochs, 
+    callbacks=callbacks,
+    steps_per_epoch=set_size//batch_size
+)
 
-# # predict using this model
-# predict(x_train, y_train, x_test, y_test, model, batch_size, data, ISNR, postfix=postfix)
+# predict using this model
+predict(x_train, y_train, x_test, y_test, model, batch_size, data, ISNR, postfix=postfix)
 
 
 ###### transfer predict w/o training ########

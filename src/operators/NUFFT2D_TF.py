@@ -95,8 +95,8 @@ class NUFFT2D_TF():
 
     def _kk2k_sub(self, kk, sel):
         """interpolates of the grid to non uniform measurements"""
-        batch_indices = self.batch_indices.reshape(-1, self.Jd[0]*self.Jd[1], 3)
-        sel_batch_indices = tf.reshape(tf.boolean_mask(batch_indices, sel, axis=0), [-1,3])
+        batch_indices = self.batch_indices.reshape(self.batch_size, -1, self.Jd[0]*self.Jd[1], 3)
+        sel_batch_indices = tf.reshape(tf.boolean_mask(batch_indices, sel, axis=1), [-1,3])
         sel_batch_values = tf.cast(tf.boolean_mask(self.batch_values, sel, axis=1), tf.complex64)
         
         v = tf.gather_nd(kk, sel_batch_indices)
@@ -117,8 +117,8 @@ class NUFFT2D_TF():
         interp = k_sub[:,:,None] * tf.cast(tf.boolean_mask(self.batch_values, sel, axis=1), tf.complex64)
         interp = tf.reshape(interp, [-1])
 
-        batch_indices = self.batch_indices.reshape(-1, self.Jd[0]*self.Jd[1], 3)
-        sel_batch_indices = tf.reshape(tf.boolean_mask(batch_indices, sel, axis=0), [-1,3])
+        batch_indices = self.batch_indices.reshape(self.batch_size, -1, self.Jd[0]*self.Jd[1], 3)
+        sel_batch_indices = tf.reshape(tf.boolean_mask(batch_indices, sel, axis=1), [-1,3])
 
         f = tf.scatter_nd(sel_batch_indices, interp, [self.batch_size] + list(self.Kd))
         return f

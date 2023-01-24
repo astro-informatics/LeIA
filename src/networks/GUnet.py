@@ -1,4 +1,3 @@
-
 import numpy as np
 import tensorflow as tf
 
@@ -77,7 +76,7 @@ class GUnet(tf.keras.Model):
         self.op = op
         self.residual = residual
 
-        assert not tf.executing_eagerly(), "GUNet cannot be run in eager execution mode, make sure to disable eager execution using `tf.compat.v1.disable_eager_execution()`"
+        # assert not tf.executing_eagerly(), "GUNet cannot be run in eager execution mode, make sure to disable eager execution using `tf.compat.v1.disable_eager_execution()`"
         if self.measurement_weights is None:
             self.measurement_weights = np.ones(len(uv))
 
@@ -144,14 +143,14 @@ class GUnet(tf.keras.Model):
             "padding": "same",
             }
 
-        # x = self._grad_block(x, grad_layers, subsampled_inputs[0], 0, freq_weights[0]) # calculate and concatenate gradients
+        x = self._grad_block(x, grad_layers, subsampled_inputs[0], 0, conv_filters=start_filters, freq_weights=freq_weights[0]) # calculate and concatenate gradients
         x = tf.keras.layers.Conv2D(filters=start_filters, **conv_kwargs)(x)
         x = tf.keras.layers.BatchNormalization()(x)
 
         # convolution downward
         for i in range(depth):
             if i != 0:
-                x = self._grad_block(x, grad_layers, subsampled_inputs[i], i, freq_weights[i])     
+                x = self._grad_block(x, grad_layers, subsampled_inputs[i], i, conv_filters=start_filters*2**(i-1), freq_weights=freq_weights[i])     
      
             x = self._convolutional_block(
                 x, 
@@ -164,7 +163,7 @@ class GUnet(tf.keras.Model):
 
 
         # Lowest scale
-        x = self._grad_block(x, grad_layers, subsampled_inputs[depth], depth, freq_weights[depth])
+        x = self._grad_block(x, grad_layers, subsampled_inputs[depth], depth, conv_filters=start_filters*2**(depth-1), freq_weights=freq_weights[depth])
         x = self._convolutional_block(
                 x, 
                 conv_layers = conv_layers, 
@@ -183,8 +182,8 @@ class GUnet(tf.keras.Model):
             # x = tf.keras.layers.ReLU()(x)
 
             # if i == depth-1:
-            if i != 0:
-                x = self._grad_block(x, grad_layers, subsampled_inputs[depth-(i+1)], depth-(i+1), freq_weights[depth-(i+1)])            
+            
+            x = self._grad_block(x, grad_layers, subsampled_inputs[depth-(i+1)], depth-(i+1), conv_filters=start_filters*2**(depth-(i+1)), freq_weights=freq_weights[depth-(i+1)])            
 
             x = tf.keras.layers.Concatenate()([x,skips[depth-(i+1)]])
 
@@ -225,7 +224,7 @@ class GUnet(tf.keras.Model):
         return x
 
     @staticmethod
-    def _grad_block(x_, grad_layers, y, i, freq_weights=1):
+    def _grad_block(x_, grad_layers, y, i, conv_filters=16,  freq_weights=1):
         with tf.name_scope("grad_" + str(i)):
             dirty_im = tf.expand_dims(tf.math.real(grad_layers[i].m_op.adj_op(  y)), axis=3)
 
@@ -236,11 +235,14 @@ class GUnet(tf.keras.Model):
                 # return tf.concat([x_[:,:,:,:], grad, filtered_grad], axis=3)
                 # return tf.concat([x_[:,:,:,:], dirty_im, grad, filtered_grad], axis=3)
                 x_ = tf.concat([x_[:,:,:,:], grad, filtered_grad, dirty_im], axis=3)
-                x_ = tf.keras.layers.Conv2D(16*2**(4-(i+1)), kernel_size=3, padding='same', activation='relu')(x_) #TODO remove hardcoded depth=4
-                return x_
+                x_ = tf.keras.layers.Conv2D(conv_filters, kernel_size=3, padding='same', activation='relu')(x_) # remove hardcoded start_filters 16
 
             else: 
-                return tf.concat([x_[:,:,:,:], filtered_grad], axis=3)
+                x_ = tf.concat([x_[:,:,:,:], filtered_grad, dirty_im], axis=3)
+                return x_
+                x_ = tf.keras.layers.Conv2D(conv_filters, kernel_size=3, padding='same', activation='relu')(x_) # remove hardcoded start_filters 16
+        # x_ = tf.keras.layers.BatchNormalization()(x_)        
+        return x_
 
     def rebuild_with_op(self, uv):
         """Rebuilds the current network with a new sampling distribution
@@ -253,7 +255,6 @@ class GUnet(tf.keras.Model):
         """
         # extract weights from current model
         weigths = [self.layers[i].get_weights() for i in range(len(self.layers))]
-
         # reset graph and make new model with same parameters but new sampling distribution
         tf.keras.backend.clear_session()
         model = GUnet(

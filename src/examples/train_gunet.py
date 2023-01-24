@@ -7,7 +7,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.keras import callbacks
 
-tf.compat.v1.disable_eager_execution() # GUNet cannot use eager execution
+#tf.compat.v1.disable_eager_execution() # GUNet cannot use eager execution
 
 # operators and sampling patterns
 from src.operators.NUFFT2D_TF import NUFFT2D_TF
