@@ -7,3 +7,4 @@ from . import PseudoInverse
 from . import LFB
 from . import GUnet_variant
 from . import GUnet_mod_grad
+from . import GUNet_var_weighted

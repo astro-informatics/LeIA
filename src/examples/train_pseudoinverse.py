@@ -44,7 +44,7 @@ except:
     postfix = ""
 
 
-data = "COCO"
+data = "TNG"
 
 Nd = (256, 256)
 Kd = (512, 512)
@@ -68,9 +68,12 @@ if operator == "NUFFT_SPIDER":
     # w = 
     w = 1/w_gridded
     w /= w.max()
-elif operator == "NUFFT_Random":
-    y_shape = int(Nd[0]**2/2)
-    uv = random_sampling(y_shape)
+elif operator == "NUFFT_Random_var":
+#     y_shape = int(Nd[0]**2/2)
+    uv = np.load(f"./data/intermediate/{data}/NUFFT_Random_var/uv_big.npy")
+    sel = np.load(f"./data/intermediate/{data}/{operator}/sel.npy")
+    uv = uv[sel]
+    y_shape = len(uv)
     op = NUFFT2D_TF
     w = np.ones(len(uv)) # no weights necessary for 50% sampling
 elif operator == "NNFFT_Random":
@@ -112,10 +115,10 @@ pt_callback = PredictionTimeCallback(project_folder + f"/results/{data}/{operato
 
 print("loading train and test data")
 x_true = np.load(data_folder+ f"x_true_train_{ISNR}dB.npy").reshape(-1,256,256)
-y_dirty = np.load(data_folder+ f"y_dirty_train_{ISNR}dB.npy").reshape(-1,y_shape)
+y_dirty = np.load(data_folder+ f"y_dirty_train_{ISNR}dB.npy")[:,sel].reshape(-1,y_shape)
 
 x_true_test = np.load(data_folder+ f"x_true_test_{ISNR}dB.npy").reshape(-1,256,256)
-y_dirty_test = np.load(data_folder+ f"y_dirty_test_{ISNR}dB.npy").reshape(-1,y_shape)
+y_dirty_test = np.load(data_folder+ f"y_dirty_test_{ISNR}dB.npy")[:,sel].reshape(-1,y_shape)
 
 
 print("predict train")

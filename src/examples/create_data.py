@@ -21,7 +21,8 @@ ISNR = 30 #dB
 
 epochs = 100
 train_size = 2000
-test_size = 1000
+test_size = 500
+val_size = 500
 n_operators = 100
 
 # data = 'COCO'
@@ -35,8 +36,9 @@ if random:
     operator += "_var"
 
 
-folder = project_folder + f"data/intermediate/{data}/{operator}/"
+folder = project_folder + f"data/intermediate/{data}/{operator}_timing/"
 os.makedirs(folder, exist_ok=True)
+print("creating data in folder: ", folder)
 
 Nd = (256, 256)
 Kd = (512, 512)
@@ -65,6 +67,13 @@ elif operator == "NUFFT_Random" or operator == "NUFFT_Random_var":
             uv = np.load(f"{folder}/uv_big.npy", uv)
         except:
             np.save(f"{folder}/uv_big.npy", uv)
+            
+        try:
+            sel = np.load(f"{folder}/sel.npy")
+        except:
+            sel = np.random.permutation(len(uv)) > len(uv)/2
+            np.save(f"{folder}/sel.npy", sel)
+            np.save(f"{folder}/uv_original.npy", uv[sel])
     
 #     m_op_original = NUFFT2D()
 #     m_op_original.plan(uv_original, Nd, Kd, Jd, batch_size=batch_size)
@@ -95,6 +104,8 @@ class TNGDataset(tf.data.Dataset):
     @staticmethod
     def _generator():
         files = glob.glob("/home/mars/git/IllustrisTNG/data/processed_256/TNG*.npy")
+        np.random.seed(6927304)
+        files = np.random.permutation(files)
         x = np.array([np.load(file) for file in files])
         while True:
             yield x[:,:,:,np.newaxis]
@@ -111,23 +122,28 @@ if data == "COCO":
 elif data == "TNG":
     ds = TNGDataset().unbatch()
 
-
+dataset = None
 print("start creating datasets")
-for i in tqdm.tqdm(range(epochs+1)):
+for i in tqdm.tqdm(range(49, epochs+1)):
 
 
     if i == 0:
-        dataset = ds.take(train_size + test_size).map(random_crop).map(tf_func_original)
+        dataset = ds.take(train_size + test_size + val_size).map(random_crop).map(tf_func)
         array = list(dataset.as_numpy_iterator())
         y_data = np.array([x[0] for x in array])
         x_data = np.array([x[1] for x in array])
 
         np.save(f"{folder}/x_true_train_{ISNR}dB.npy",  x_data[:train_size])
-        np.save(f"{folder}/x_true_test_{ISNR}dB.npy",   x_data[train_size:])
         np.save(f"{folder}/y_dirty_train_{ISNR}dB.npy", y_data[:train_size])
-        np.save(f"{folder}/y_dirty_test_{ISNR}dB.npy",  y_data[train_size:])
+        np.save(f"{folder}/x_true_test_{ISNR}dB.npy",   x_data[train_size:train_size+test_size])
+        np.save(f"{folder}/y_dirty_test_{ISNR}dB.npy",  y_data[train_size:train_size+test_size])
+        np.save(f"{folder}/x_true_val_{ISNR}dB.npy",   x_data[train_size+test_size:])
+        np.save(f"{folder}/y_dirty_val_{ISNR}dB.npy",  y_data[train_size+test_size:])
+        
         dataset = ds.take(train_size).cache()
     else:
+        if dataset is None:
+            dataset = ds.take(train_size).cache()
         # if random:
             # sel_data = []
             # for idx in range(train_size):
