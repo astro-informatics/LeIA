@@ -61,7 +61,7 @@ class NUFFT2D_TF():
         beta = 2.34*J
         s_kb = lambda x: np.sinc(np.sqrt((np.pi *x *J)**2 - (2.34*J)**2 +0j)/np.pi)
 
-        xx = (np.arange(Kd[0])/Kd[0] -.5)[Kd[0]//4:-Kd[0]//4] #TODO remove hard coded upsampling of factor 2 in slicing
+        xx = (np.arange(Kd[0])/Kd[0] -.5)[(Kd[0]-Nd[0])//2:(Kd[0]-Nd[0])//2 + Nd[0]]
         sa = s_kb(xx).real
         self.scaling = (sa.reshape(-1,1) * sa.reshape(1,-1)).reshape(1, Nd[0], Nd[0])
         self.scaling = tf.convert_to_tensor(self.scaling, dtype=tf.complex64)

@@ -51,7 +51,7 @@ class NUFFT2D():
         s_kb = lambda x: np.sinc(np.sqrt((np.pi *x *J)**2 - (2.34*J)**2 +0j)/np.pi)
 
         # scaling done for both axes seperately
-        xx = (np.arange(Kd[0])/Kd[0] -.5)[Kd[0]//4:-Kd[0]//4]
+        xx = (np.arange(Kd[0])/Kd[0] -.5)[(Kd[0]-Nd[0])//2:(Kd[0]-Nd[0])//2 + Nd[0]]
         sa = s_kb(xx)
         self.scaling = (sa.reshape(-1,1) * sa.reshape(1,-1))
 
