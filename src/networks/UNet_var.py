@@ -17,7 +17,8 @@ class UNet_var(tf.keras.Model):
         output_activation='linear', 
         input_type="image",
         residual = True,
-        batch_size=20
+        batch_size=20,
+        metrics=[],
         ):
 
         # store parameters
@@ -118,7 +119,7 @@ class UNet_var(tf.keras.Model):
 
         super().__init__(inputs=[inputs, sel], outputs=outputs)
         print(inputs, outputs)
-        self.compile(optimizer='adam', loss= tf.keras.losses.MSE)
+        self.compile(optimizer='adam', loss= tf.keras.losses.MSE, metrics=metrics)
 
     @staticmethod
     def _convolutional_block(x, conv_layers, filters, **conv_kwargs):
