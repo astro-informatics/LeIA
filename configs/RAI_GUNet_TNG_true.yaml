@@ -1,0 +1,32 @@
+operator: NUFFT_Random_var
+network: GUNet
+dataset: TNG
+ISNR: 30
+exp_name: test
+
+# Training strategies as discussed in Mars et al. (in prep.)
+training_strategy: "True"
+# training_strategy: "Single"
+# training_strategy: "Distribution"
+# training_strategy: "Single transfer"
+# training_strategy: "Distribution transfer"
+
+data_base_folder: "./data/"
+checkpoint_base_folder: "./models/"
+log_base_folder: "./logs/"
+results_base_folder: "./results/"
+
+Nd: 256 # input image size
+Kd: 512 # upsampled image size (for use in NUFFT operator)
+Jd: 6   # NUFFT kernel size 
+
+epochs: 1000
+transfer_epochs: 100
+batch_size: 20
+
+train_size: 2000
+val_size: 1000
+test_size: 1000
+save_freq: 5
+
+train_size: 2000
