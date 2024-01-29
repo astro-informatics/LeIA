@@ -5,14 +5,14 @@ gpu_setup()
 import os
 import sys
 import yaml
-import glob
 import tqdm
 
 import numpy as np
 import tensorflow as tf
 
-from src.dataset import measurement_func
-from src.sampling.uv_sampling import random_sampling
+from src.data.SPIDER_datasets import COCODataset
+from src.dataset import measurement_func, random_crop
+from src.sampling.uv_sampling import spider_sampling
 
 config_file = str(sys.argv[1])
 with open(config_file, "r") as file:
@@ -32,46 +32,16 @@ ISNR = cfg.ISNR #dB
 
 batch_size = 1
 
-try: 
-    uv = np.load(f"{data_folder}/uv_big.npy")
-    sel_original = np.load(f"{data_folder}/sel.npy")
-    uv_original = np.load(f"{data_folder}/uv_original.npy")
-except:
-    y_shape = int(Nd[0]**2/2)
-    uv = random_sampling(y_shape*2)
-    sel_original = np.random.permutation(len(uv)) < len(uv)/2
-    uv_original = uv[sel_original]
-    np.save(f"{data_folder}/uv_big.npy", uv)
-    np.save(f"{data_folder}/sel.npy", sel_original)
-    np.save(f"{data_folder}/uv_original.npy", uv_original)
+uv_original = spider_sampling()
 
 # function on true uv coverage
 tf_func_original, func_original = measurement_func(uv_original,  m_op=None, Nd=Nd, ISNR=ISNR)
-# function on oversampled uv coverage
-tf_func, func_big = measurement_func(uv,  m_op=None, Nd=Nd, ISNR=ISNR)
 
 # set random seeds
 np.random.seed(8394829)
 tf.random.set_seed(8394829)
 
-class TNGDataset(tf.data.Dataset):
-    """a dataset that loads image data. """
-
-    @staticmethod
-    def _generator():
-        files = glob.glob("/home/mars/git/IllustrisTNG/data/processed_256/TNG*.npy")
-        x = np.array([np.load(file) for file in files])
-        while True:
-            yield x[:,:,:,np.newaxis]
-
-    def __new__(cls):
-        return tf.data.Dataset.from_generator(
-            cls._generator,
-            output_types=(tf.float32),
-            args=()
-        )
-
-ds = TNGDataset().unbatch()
+ds = COCODataset(train_size + test_size, "COCO")
 
 print("start creating datasets")
 for i in tqdm.tqdm(range(pre_augment_epochs+1)):
@@ -88,7 +58,8 @@ for i in tqdm.tqdm(range(pre_augment_epochs+1)):
         np.save(f"{data_folder}/y_dirty_test_{ISNR}dB.npy",  y_data[train_size:])
         dataset = ds.take(train_size).cache()
     else:
-        dataset2 = dataset.shuffle(train_size).map(tf_func)
+        dataset2 = dataset.shuffle(train_size).map(random_crop).map(tf_func_original)
+
         array = list(dataset2.as_numpy_iterator())
 
         y_data = np.array([x[0] for x in array])
@@ -96,3 +67,24 @@ for i in tqdm.tqdm(range(pre_augment_epochs+1)):
 
         np.save(f"{data_folder}/x_true_train_{ISNR}dB_{i-1:03d}.npy",  x_data)
         np.save(f"{data_folder}/y_dirty_train_{ISNR}dB_{i-1:03d}.npy", y_data)
+
+
+# Create set with varying ISNR
+x_robustness = []
+y_robustness = []
+dataset = ds.take(train_size+100).cache()
+
+for isnr in tqdm.tqdm(np.arange(30, 5,-2.5)):
+    tf_func, func = measurement_func(uv_original,  m_op=None, Nd=Nd, ISNR=isnr)
+
+    dataset2 = dataset.skip(train_size).take(100).map(random_crop).map(tf_func)
+    array = list(dataset2.as_numpy_iterator())
+
+    y_data = np.array([x[0] for x in array])
+    x_data = np.array([x[1] for x in array])
+
+    y_robustness.append(y_data)
+    x_robustness.append(x_data)
+
+np.save(f"{data_folder}/x_true_test_{ISNR}dB_robustness.npy",  np.array(x_robustness).reshape(-1, 256,256))
+np.save(f"{data_folder}/y_dirty_test_{ISNR}dB_robustness.npy",  np.array(y_robustness).reshape(-1, len(uv_original)))
