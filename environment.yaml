@@ -16,3 +16,4 @@ dependencies:
       - tensorflow==2.4
       - -e .
       - yogadl==0.1.4
+      - git+https://github.com/astro-informatics/Optimus-Primal.git
