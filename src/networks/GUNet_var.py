@@ -126,7 +126,8 @@ class GUNet_var(tf.keras.Model):
             
             y_sub = tf.boolean_mask(inputs, sel[0], axis=1)
 #             x = tf.math.real(m_op.adj_op_sub(inputs * measurement_weights), sel)
-            x = tf.math.real(ops[0].adj_op_sub(y_sub, tf.reshape(sel[0], [-1])))
+#             x = tf.math.real(ops[0].adj_op_sub(y_sub, tf.reshape(sel[0], [-1])))
+            x = tf.math.real(ops[0].adj_op_sub(y_sub*freq_weights[0], tf.reshape(sel[0], [-1])))
             
         else:
             raise ValueError("argument input_type should be one of ['image', 'measurements']")

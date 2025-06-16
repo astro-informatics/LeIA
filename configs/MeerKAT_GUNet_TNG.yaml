@@ -1,0 +1,32 @@
+operator: NUFFT_Random
+network: GUNet
+dataset: TNG
+ISNR: 30
+exp_name: meerkat
+
+# Training strategies as discussed in Mars et al. (in prep.)
+# training_strategy: "True"
+# training_strategy: "Single"
+# training_strategy: "Distribution"
+# training_strategy: "Single transfer"
+# training_strategy: "Distribution transfer"
+
+data_base_folder: "./data/"
+checkpoint_base_folder: "./models/"
+log_base_folder: "./logs/"
+results_base_folder: "./results/"
+
+Nd: 512 # input image size
+Kd: 1024 # upsampled image size (for use in NUFFT operator)
+Jd: 6   # NUFFT kernel size 
+
+epochs: 100
+# transfer_epochs: 100
+batch_size: 5
+
+train_size: 2000
+val_size: 1000
+test_size: 1000
+save_freq: 5
+
+train_size: 2000
